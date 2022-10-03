@@ -79,7 +79,7 @@ jobs:
             . ./activate && \
             pip install --upgrade pip
           '
-        docker run --rm -v $(pwd):/io ghcr.io/pyo3/maturin:v0.13.1 build --release --strip --manylinux 2010
+        docker run --rm -v $(pwd):/io ghcr.io/pyo3/maturin build --release --strip --manylinux 2010
         # Refresh in case any ownerships changed.
         mv target target.docker && cp -r target.docker target
         # Ensure an empty .cargo-lock file exists.
@@ -169,10 +169,7 @@ jobs:
       run: |
         rustup target add wasm32-unknown-unknown
         cargo install wasm-bindgen-cli --version 0.2.80
-        cargo install wasm-pack
-        make
-        npm link ./pkg
-        cd mock-test && npm install && npm run build && npm link clvm_tools_rs && ../resources/tests/linux-install-node.sh ./build/runmock.js
+        cd mock-test && npm install && make && ../resources/tests/linux-install-node.sh ./build/runmock.js
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v2
