@@ -44,6 +44,21 @@ fn include_dialect(
     None
 }
 
+pub fn write_sym_output(
+    compiled_lookup: &HashMap<String, String>,
+    path: &str,
+) -> Result<(), String> {
+    m! {
+        output <- serde_json::to_string(compiled_lookup).map_err(|_| {
+            "failed to serialize to json".to_string()
+        });
+
+        fs::write(path, output).map_err(|_| {
+            format!("failed to write {}", path)
+        }).map(|_| ())
+    }
+}
+
 pub fn detect_modern(allocator: &mut Allocator, sexp: NodePtr) -> Option<i32> {
     let mut dialects = HashMap::new();
     dialects.insert("*standard-cl-21*".as_bytes().to_vec(), 21);
@@ -76,7 +91,7 @@ pub fn detect_modern(allocator: &mut Allocator, sexp: NodePtr) -> Option<i32> {
     })
 }
 
-fn compile_clvm_text(
+pub fn compile_clvm_text(
     allocator: &mut Allocator,
     search_paths: &[String],
     symbol_table: &mut HashMap<String, String>,
@@ -106,7 +121,7 @@ fn compile_clvm_text(
     } else {
         let compile_invoke_code = run(allocator);
         let input_sexp = allocator.new_pair(assembled_sexp, allocator.null())?;
-        let run_program = run_program_for_search_paths(search_paths);
+        let run_program = run_program_for_search_paths(Some(input_path.to_string()), search_paths);
         let run_program_output =
             run_program.run_program(allocator, compile_invoke_code, input_sexp, None)?;
         Ok(run_program_output.1)

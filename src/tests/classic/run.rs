@@ -1,7 +1,10 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::classic::clvm::__type_compatibility__::Stream;
 use crate::classic::clvm_tools::cmds::launch_tool;
+
+use crate::compiler::sexp::decode_string;
 
 fn do_basic_brun(args: &Vec<String>) -> String {
     let mut s = Stream::new(None);
@@ -254,5 +257,220 @@ fn test_forms_of_destructuring_allowed_by_classic_1() {
         ])
         .trim(),
         "(i 2 (q . 2) (q . 3))"
+    );
+}
+
+#[test]
+fn test_compile_file_1() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (compile-file foo secret_number.cl) foo)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(+ 2 (q . 19))");
+}
+
+#[test]
+fn test_embed_file_2() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (embed-file testhex hex hex-embed-01.hex) testhex)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(65 66 67)");
+}
+
+#[test]
+fn test_compile_file_3() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (compile-file foo secret_number.cl) foo)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(+ 2 (q . 19))");
+}
+
+#[test]
+fn test_embed_file_4() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (embed-file testhex hex hex-embed-01.hex) testhex)"
+            .to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(65 66 67)");
+}
+
+#[test]
+fn test_embed_file_5() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (embed-file testsexp sexp embed.sexp) testsexp)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(lsh 24 25)");
+}
+
+#[test]
+fn test_embed_file_6() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (embed-file testsexp sexp embed.sexp) testsexp)"
+            .to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(lsh 24 25)");
+}
+
+#[test]
+fn test_embed_file_7() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (embed-file hello bin hello.bin) hello)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "\"hello\"");
+}
+
+#[test]
+fn test_embed_file_8() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (embed-file hello bin hello.bin) hello)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "\"hello\"");
+}
+
+fn run_dependencies(filename: &str) -> HashSet<String> {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "-M".to_string(),
+        filename.to_owned(),
+    ])
+    .trim()
+    .to_string();
+
+    let mut dep_set = HashSet::new();
+    for l in result_text.lines() {
+        if let Some(suffix_start) = l.find("resources/tests") {
+            let copied_suffix: Vec<u8> = l.as_bytes().iter().skip(suffix_start).copied().collect();
+            dep_set.insert(decode_string(&copied_suffix));
+        } else {
+            panic!("file {} isn't expected", l);
+        }
+    }
+
+    dep_set
+}
+
+#[test]
+fn test_get_dependencies_1() {
+    let dep_set = run_dependencies("resources/tests/singleton_top_layer.clvm");
+
+    let mut expect_set = HashSet::new();
+    expect_set.insert("resources/tests/condition_codes.clvm".to_owned());
+    expect_set.insert("resources/tests/curry-and-treehash.clinc".to_owned());
+    expect_set.insert("resources/tests/singleton_truths.clib".to_owned());
+
+    assert_eq!(dep_set, expect_set);
+}
+
+#[test]
+fn test_get_dependencies_2() {
+    let dep_set = run_dependencies("resources/tests/test_treehash_constant.cl");
+
+    let mut expect_set = HashSet::new();
+    expect_set.insert("resources/tests/sha256tree.clib".to_owned());
+    expect_set.insert("resources/tests/secret_number.cl".to_owned());
+    expect_set.insert("resources/tests/test_sub_include.cl".to_owned());
+    assert_eq!(dep_set, expect_set);
+}
+
+#[test]
+fn test_treehash_constant() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/test_treehash_constant.cl".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0x34380f2097b86970818f8b026b68135d665babc5fda5afe577f86d51105e08b5"
+    );
+}
+
+#[test]
+fn test_treehash_constant_21() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/test_treehash_constant_21.cl".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0x34380f2097b86970818f8b026b68135d665babc5fda5afe577f86d51105e08b5"
     );
 }

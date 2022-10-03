@@ -1196,9 +1196,10 @@ impl Evaluator {
         self.helpers.push(h.clone());
     }
 
+    // The evaluator treats the forms coming up from constants as live.
     fn get_constant(&self, name: &[u8]) -> Option<Rc<BodyForm>> {
         for h in self.helpers.iter() {
-            if let HelperForm::Defconstant(_, n, body) = h {
+            if let HelperForm::Defconstant(_, _, n, body) = h {
                 if n == name {
                     return Some(body.clone());
                 }
