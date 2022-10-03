@@ -103,10 +103,7 @@ fn process_embed(
             let parsed = parse_sexp(Srcloc::start(&full_name), &decode_string(&content))
                 .map_err(|e| CompileErr(e.0, e.1))?;
             if parsed.len() != 1 {
-                return Err(CompileErr(
-                    loc,
-                    format!("More than one form in {}", fname),
-                ));
+                return Err(CompileErr(loc, format!("More than one form in {}", fname)));
             }
 
             parsed[0].clone()
