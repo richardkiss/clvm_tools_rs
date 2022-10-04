@@ -124,6 +124,8 @@ pub trait CompilerOpts {
     fn frontend_opt(&self) -> bool;
     fn start_env(&self) -> Option<Rc<SExp>>;
     fn prim_map(&self) -> Rc<HashMap<Vec<u8>, Rc<SExp>>>;
+    fn get_search_paths(&self) -> Vec<String>;
+    fn get_strict(&self) -> bool;
 
     fn set_search_paths(&self, dirs: &[String]) -> Rc<dyn CompilerOpts>;
     fn set_in_defun(&self, new_in_defun: bool) -> Rc<dyn CompilerOpts>;
@@ -132,6 +134,7 @@ pub trait CompilerOpts {
     fn set_frontend_opt(&self, opt: bool) -> Rc<dyn CompilerOpts>;
     fn set_compiler(&self, new_compiler: PrimaryCodegen) -> Rc<dyn CompilerOpts>;
     fn set_start_env(&self, start_env: Option<Rc<SExp>>) -> Rc<dyn CompilerOpts>;
+    fn set_strict(&self, strict: bool) -> Rc<dyn CompilerOpts>;
 
     fn read_new_file(
         &self,

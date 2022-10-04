@@ -35,8 +35,9 @@ pub struct DefaultCompilerOpts {
     pub frontend_opt: bool,
     pub start_env: Option<Rc<SExp>>,
     pub prim_map: Rc<HashMap<Vec<u8>, Rc<SExp>>>,
+    pub strict: bool,
 
-    known_dialects: Rc<HashMap<String, String>>,
+    pub known_dialects: Rc<HashMap<String, String>>
 }
 
 fn fe_opt(
@@ -187,6 +188,12 @@ impl CompilerOpts for DefaultCompilerOpts {
     fn prim_map(&self) -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
         self.prim_map.clone()
     }
+    fn get_search_paths(&self) -> Vec<String> {
+        self.include_dirs.clone()
+    }
+    fn get_strict(&self) -> bool {
+        self.strict
+    }
 
     fn set_search_paths(&self, dirs: &[String]) -> Rc<dyn CompilerOpts> {
         let mut copy = self.clone();
@@ -221,6 +228,11 @@ impl CompilerOpts for DefaultCompilerOpts {
     fn set_start_env(&self, start_env: Option<Rc<SExp>>) -> Rc<dyn CompilerOpts> {
         let mut copy = self.clone();
         copy.start_env = start_env;
+        Rc::new(copy)
+    }
+    fn set_strict(&self, strict: bool) -> Rc<dyn CompilerOpts> {
+        let mut copy = self.clone();
+        copy.strict = strict;
         Rc::new(copy)
     }
 
@@ -301,6 +313,10 @@ impl DefaultCompilerOpts {
         )"}
             .to_string(),
         );
+        known_dialects.insert(
+            "*strict*".to_string(),
+            "( (defconstant *strict* 1) )".to_string()
+        );
 
         DefaultCompilerOpts {
             include_dirs: vec![".".to_string()],
@@ -312,6 +328,7 @@ impl DefaultCompilerOpts {
             frontend_opt: false,
             start_env: None,
             prim_map: Rc::new(prim_map),
+            strict: false,
             known_dialects: Rc::new(known_dialects),
         }
     }

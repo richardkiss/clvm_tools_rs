@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::default::Default;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -28,15 +29,31 @@ use crate::compiler::comptypes::CompileErr;
 use crate::compiler::comptypes::CompilerOpts;
 use crate::compiler::runtypes::RunFailure;
 
+#[derive(Debug, Clone)]
+pub enum DirectiveDetectionForm {
+    ChooseDialect(i32),
+    ChooseStrict
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SourceFileChoices {
+    pub dialect: Option<i32>,
+    pub strict: bool
+}
+
+impl SourceFileChoices {
+    pub fn new() -> Self { Default::default() }
+}
+
 fn include_dialect(
     allocator: &mut Allocator,
-    dialects: &HashMap<Vec<u8>, i32>,
+    dialects: &HashMap<Vec<u8>, DirectiveDetectionForm>,
     e: &[NodePtr],
-) -> Option<i32> {
+) -> Option<DirectiveDetectionForm> {
     if let (SExp::Atom(inc), SExp::Atom(name)) = (allocator.sexp(e[0]), allocator.sexp(e[1])) {
         if allocator.buf(&inc) == "include".as_bytes().to_vec() {
             if let Some(dialect) = dialects.get(allocator.buf(&name)) {
-                return Some(*dialect);
+                return Some(dialect.clone());
             }
         }
     }
@@ -44,16 +61,43 @@ fn include_dialect(
     None
 }
 
-pub fn detect_modern(allocator: &mut Allocator, sexp: NodePtr) -> Option<i32> {
-    let mut dialects = HashMap::new();
-    dialects.insert("*standard-cl-21*".as_bytes().to_vec(), 21);
-    dialects.insert("*standard-cl-22*".as_bytes().to_vec(), 22);
+pub fn write_sym_output(
+    compiled_lookup: &HashMap<String, String>,
+    path: &str,
+) -> Result<(), String> {
+    m! {
+        output <- serde_json::to_string(compiled_lookup).map_err(|_| {
+            "failed to serialize to json".to_string()
+        });
 
-    proper_list(allocator, sexp, true).and_then(|l| {
+        fs::write(path, output).map_err(|_| {
+            format!("failed to write {}", path)
+        }).map(|_| ())
+    }
+}
+
+pub fn apply_choice(
+    allocator: &mut Allocator,
+    dialects: &HashMap<Vec<u8>, DirectiveDetectionForm>,
+    choices: &mut SourceFileChoices,
+    elts: &[NodePtr]
+) {
+    match include_dialect(allocator, dialects, elts) {
+        Some(DirectiveDetectionForm::ChooseDialect(n)) => { choices.dialect = Some(n); },
+        Some(DirectiveDetectionForm::ChooseStrict) => { choices.strict = true; },
+        _ => { }
+    }
+}
+
+fn detect_modern_rec(
+    allocator: &mut Allocator,
+    dialects: &HashMap<Vec<u8>, DirectiveDetectionForm>,
+    choices: &mut SourceFileChoices,
+    sexp: NodePtr
+) {
+    if let Some(l) = proper_list(allocator, sexp, true) {
         for elt in l.iter() {
-            if let Some(dialect) = detect_modern(allocator, *elt) {
-                return Some(dialect);
-            }
+            detect_modern_rec(allocator, dialects, choices, *elt);
 
             match proper_list(allocator, *elt, true) {
                 None => {
@@ -65,15 +109,25 @@ pub fn detect_modern(allocator: &mut Allocator, sexp: NodePtr) -> Option<i32> {
                         continue;
                     }
 
-                    if let Some(dialect) = include_dialect(allocator, &dialects, &e) {
-                        return Some(dialect);
-                    }
+                    apply_choice(allocator, dialects, choices, &e);
                 }
             }
         }
+    }
+}
 
-        None
-    })
+pub fn detect_modern(allocator: &mut Allocator, sexp: NodePtr) -> SourceFileChoices {
+    let mut dialects = HashMap::new();
+
+    dialects.insert("*strict*".as_bytes().to_vec(), DirectiveDetectionForm::ChooseStrict);
+    dialects.insert("*standard-cl-21*".as_bytes().to_vec(), DirectiveDetectionForm::ChooseDialect(21));
+    dialects.insert("*standard-cl-22*".as_bytes().to_vec(), DirectiveDetectionForm::ChooseDialect(22));
+
+    let mut choices = SourceFileChoices::new();
+
+    detect_modern_rec(allocator, &dialects, &mut choices, sexp);
+
+    choices
 }
 
 fn compile_clvm_text(
@@ -86,7 +140,8 @@ fn compile_clvm_text(
     let ir_src = read_ir(text).map_err(|s| EvalErr(allocator.null(), s))?;
     let assembled_sexp = assemble_from_ir(allocator, Rc::new(ir_src))?;
 
-    if let Some(dialect) = detect_modern(allocator, assembled_sexp) {
+    let choices = detect_modern(allocator, assembled_sexp);
+    if let Some(dialect) = choices.dialect {
         let runner = Rc::new(DefaultProgramRunner::new());
         let opts = Rc::new(DefaultCompilerOpts::new(input_path))
             .set_optimize(true)

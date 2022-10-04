@@ -11,6 +11,7 @@ use crate::classic::clvm::sexp::{enlist, map_m, proper_list, rest};
 use crate::classic::clvm_tools::sha256tree::sha256tree;
 use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 
+use crate::compiler::codegen::codegen;
 use crate::compiler::comptypes::{CompileErr, CompilerOpts};
 use crate::compiler::frontend::frontend;
 use crate::compiler::sexp::parse_sexp;
@@ -273,26 +274,44 @@ pub fn trace_pre_eval(
     }
 }
 
-pub fn check_unused(
+pub fn do_strict_checks(
+    allocator: &mut Allocator,
+    runner: Rc<dyn TRunProgram>,
     opts: Rc<dyn CompilerOpts>,
     input_program: &str,
+    unused_variable: bool,
+    undefined_variable: bool
 ) -> Result<(bool, String), CompileErr> {
     let mut output: Stream = Stream::new(None);
     let pre_forms = parse_sexp(Srcloc::start(&opts.filename()), input_program)
         .map_err(|e| CompileErr(e.0, e.1))?;
     let g = frontend(opts.clone(), pre_forms)?;
-    let unused = check_parameters_used_compileform(opts, Rc::new(g))?;
 
-    if !unused.is_empty() {
-        output.write_str("unused arguments detected at the mod level (lower case arguments are considered uncurried by convention)\n");
-        for s in unused.iter() {
-            output.write_str(&format!(
-                " - {}\n",
-                Bytes::new(Some(BytesFromType::Raw(s.clone()))).decode()
-            ));
+    if unused_variable {
+        let unused = check_parameters_used_compileform(opts.clone(), Rc::new(g.clone()))?;
+
+        if !unused.is_empty() {
+            output.write_str("unused arguments detected at the mod level (lower case arguments are considered uncurried by convention)\n");
+            for s in unused.iter() {
+                output.write_str(&format!(
+                    " - {}\n",
+                    Bytes::new(Some(BytesFromType::Raw(s.clone()))).decode()
+                ));
+            }
+            return Ok((false, output.get_value().decode()));
         }
-        Ok((false, output.get_value().decode()))
-    } else {
-        Ok((true, output.get_value().decode()))
     }
+
+    if undefined_variable {
+        // the result is an error or generated code.
+        let _ = codegen(
+            allocator,
+            runner,
+            opts,
+            &g,
+            &mut HashMap::new()
+        )?;
+    }
+
+    Ok((true, output.get_value().decode()))
 }

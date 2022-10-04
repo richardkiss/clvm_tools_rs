@@ -256,3 +256,39 @@ fn test_forms_of_destructuring_allowed_by_classic_1() {
         "(i 2 (q . 2) (q . 3))"
     );
 }
+
+#[test]
+fn test_include_non_strict_no_fail() {
+    let result =
+        do_basic_run(&vec![
+            "run".to_string(),
+            "(mod () (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string()
+        ])
+        .trim().to_string();
+
+    assert_eq!(result.find("Unknown variable reference X1").is_none(), true);
+}
+
+#[test]
+fn test_include_strict_fail() {
+    let result =
+        do_basic_run(&vec![
+            "run".to_string(),
+            "(mod () (include *strict*) (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string()
+        ])
+        .trim().to_string();
+
+    assert_eq!(result.find("Unknown variable reference X1").is_some(), true);
+}
+
+#[test]
+fn test_include_strict_modern_fail() {
+    let result =
+        do_basic_run(&vec![
+            "run".to_string(),
+            "(mod () (include *strict*) (include *standard-cl-21*) (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string()
+        ])
+        .trim().to_string();
+
+    assert_eq!(result.find("Unknown variable reference X1").is_some(), true);
+}

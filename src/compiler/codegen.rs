@@ -523,6 +523,11 @@ pub fn generate_expr_code(
                         create_name_lookup(compiler, l.clone(), atom)
                             .map(|f| Ok(CompiledCode(l.clone(), f)))
                             .unwrap_or_else(|_| {
+                                if opts.get_strict() {
+                                    // Don't allow unknown atoms as expressions
+                                    // in strict mode.
+                                    return Err(CompileErr(l.clone(), format!("Unknown variable reference {}", decode_string(atom))));
+                                }
                                 // Pass through atoms that don't look up on behalf of
                                 // macros, as it's possible that a macro returned
                                 // something that's canonically a name in number form.

@@ -27,7 +27,7 @@ use crate::classic::clvm::sexp::{enlist, proper_list, sexp_as_bin};
 use crate::classic::clvm_tools::binutils::{assemble_from_ir, disassemble, disassemble_with_kw};
 use crate::classic::clvm_tools::clvmc::detect_modern;
 use crate::classic::clvm_tools::debug::{
-    check_unused, trace_pre_eval, trace_to_table, trace_to_text,
+    do_strict_checks, trace_pre_eval, trace_to_table, trace_to_text,
 };
 use crate::classic::clvm_tools::ir::reader::read_ir;
 use crate::classic::clvm_tools::sha256tree::sha256tree;
@@ -842,22 +842,34 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         .map(|a| matches!(a, ArgumentValue::ArgBool(true)))
         .unwrap_or(false);
 
-    let dialect = input_sexp.and_then(|i| detect_modern(&mut allocator, i));
+    let choices = input_sexp.map(|i| detect_modern(&mut allocator, i)).unwrap_or_else(|| Default::default());
     let mut stderr_output = |s: String| {
-        if dialect.is_some() {
+        if choices.dialect.is_some() {
             eprintln!("{}", s);
         } else {
             stdout.write_str(&s);
         }
     };
 
-    if do_check_unused {
+    // Figure out how we should check things, we have unused checking
+    // and strict mode, which run the same infrastructure but to different
+    // purposes.
+    // If strict and no dialect, we'll compile with classic but we'll
+    // use the same modern parse here to check for strict variable use.
+    if do_check_unused || (choices.strict && choices.dialect.is_none()) {
         let use_filename = input_file
             .as_ref()
             .cloned()
             .unwrap_or_else(|| "*command*".to_string());
-        let opts = Rc::new(DefaultCompilerOpts::new(&use_filename)).set_search_paths(&search_paths);
-        match check_unused(opts, &input_program) {
+        let opts = Rc::new(DefaultCompilerOpts::new(&use_filename)).set_search_paths(&search_paths).set_strict(choices.strict);
+        match do_strict_checks(
+            &mut allocator,
+            run_program.clone(),
+            opts,
+            &input_program,
+            do_check_unused,
+            choices.strict
+        ) {
             Ok((success, output)) => {
                 stderr_output(output);
                 if !success {
@@ -872,7 +884,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     }
 
     // In testing: short circuit for modern compilation.
-    if let Some(dialect) = dialect {
+    if let Some(dialect) = choices.dialect {
         let do_optimize = parsed_args
             .get("optimize")
             .map(|x| matches!(x, ArgumentValue::ArgBool(true)))
@@ -882,7 +894,8 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         let opts = Rc::new(DefaultCompilerOpts::new(&use_filename))
             .set_optimize(do_optimize)
             .set_search_paths(&search_paths)
-            .set_frontend_opt(dialect > 21);
+            .set_frontend_opt(dialect > 21)
+            .set_strict(choices.strict);
         let mut symbol_table = HashMap::new();
 
         let unopt_res = compile_file(
