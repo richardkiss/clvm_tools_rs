@@ -6,8 +6,8 @@ use std::rc::Rc;
 use crate::classic::clvm::__type_compatibility__::bi_one;
 
 use crate::compiler::comptypes::{
-    list_to_cons, Binding, BodyForm, CompileErr, CompileForm, CompilerOpts, HelperForm,
-    LetFormKind, ModAccum,
+    list_to_cons, Binding, BodyForm, CompileErr, CompileForm, CompilerOpts, ConstantKind,
+    HelperForm, LetFormKind, ModAccum,
 };
 use crate::compiler::preprocessor::preprocess;
 use crate::compiler::rename::rename_children_compileform;
@@ -69,7 +69,7 @@ fn collect_used_names_bodyform(body: &BodyForm) -> Vec<Vec<u8>> {
 
 fn collect_used_names_helperform(body: &HelperForm) -> Vec<Vec<u8>> {
     match body {
-        HelperForm::Defconstant(_, _, value) => collect_used_names_bodyform(value),
+        HelperForm::Defconstant(_, _, _, value) => collect_used_names_bodyform(value),
         HelperForm::Defmacro(_, _, _, body) => collect_used_names_compileform(body),
         HelperForm::Defun(_, _, _, _, body) => collect_used_names_bodyform(body),
     }
@@ -329,8 +329,20 @@ pub fn compile_bodyform(body: Rc<SExp>) -> Result<BodyForm, CompileErr> {
     }
 }
 
+// More modern constant definition that interprets code ala constexpr.
+fn compile_defconst(l: Srcloc, name: Vec<u8>, body: Rc<SExp>) -> Result<HelperForm, CompileErr> {
+    let bf = compile_bodyform(body)?;
+    Ok(HelperForm::Defconstant(
+        l,
+        ConstantKind::Complex,
+        name.to_vec(),
+        Rc::new(bf),
+    ))
+}
+
 fn compile_defconstant(l: Srcloc, name: Vec<u8>, body: Rc<SExp>) -> Result<HelperForm, CompileErr> {
-    compile_bodyform(body).map(|bf| HelperForm::Defconstant(l, name.to_vec(), Rc::new(bf)))
+    compile_bodyform(body)
+        .map(|bf| HelperForm::Defconstant(l, ConstantKind::Simple, name.to_vec(), Rc::new(bf)))
 }
 
 fn compile_defun(
@@ -394,7 +406,7 @@ fn match_op_name_4(body: Rc<SExp>, pl: &[SExp]) -> Option<(Vec<u8>, Vec<u8>, Rc<
                         op_name.clone(),
                         name.clone(),
                         Rc::new(pl[2].clone()),
-                        Rc::new(enlist(l, tail_list)),
+                        Rc::new(enlist(l, &tail_list)),
                     ))
                 }
                 _ => Some((
@@ -421,6 +433,8 @@ fn compile_helperform(
     {
         if op_name == b"defconstant" {
             return compile_defconstant(l, name.to_vec(), args).map(Some);
+        } else if op_name == b"defconst" {
+            return compile_defconst(l, name.to_vec(), args).map(Some);
         } else if op_name == b"defmacro" {
             return compile_defmacro(opts, l, name.to_vec(), args, body).map(Some);
         } else if op_name == b"defun" {
@@ -518,8 +532,9 @@ fn frontend_start(
 
                     if *mod_atom == "mod".as_bytes().to_vec() {
                         let args = Rc::new(x[1].clone());
-                        let body_vec = x.iter().skip(2).map(|s| Rc::new(s.clone())).collect();
-                        let body = Rc::new(enlist(pre_forms[0].loc(), body_vec));
+                        let body_vec: Vec<Rc<SExp>> =
+                            x.iter().skip(2).map(|s| Rc::new(s.clone())).collect();
+                        let body = Rc::new(enlist(pre_forms[0].loc(), &body_vec));
 
                         let ls = preprocess(opts.clone(), body)?;
                         return compile_mod_(

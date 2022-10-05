@@ -27,19 +27,49 @@ use crate::classic::clvm_tools::stages::stage_2::optimize::do_optimize;
 
 pub struct CompilerOperators {
     base_dialect: Rc<dyn Dialect>,
+    filename: Option<String>,
     search_paths: Vec<String>,
     compile_outcomes: RefCell<HashMap<String, String>>,
     dialect: RefCell<Rc<dyn Dialect>>,
     runner: RefCell<Rc<dyn TRunProgram>>,
 }
 
+pub fn full_path_for_filename(
+    parent_sexp: NodePtr,
+    filename: &str,
+    search_paths: &[String],
+) -> Result<String, EvalErr> {
+    for path in search_paths.iter() {
+        let mut path_buf = PathBuf::new();
+        path_buf.push(path);
+        path_buf.push(filename);
+        let f_path = path_buf.as_path();
+        if f_path.exists() {
+            return f_path
+                .to_str()
+                .map(|x| x.to_owned())
+                .map(Ok)
+                .unwrap_or_else(|| {
+                    Err(EvalErr(
+                        parent_sexp,
+                        "could not compute absolute path".to_string(),
+                    ))
+                });
+        }
+    }
+
+    Err(EvalErr(parent_sexp, "can't open file".to_string()))
+}
+
 impl CompilerOperators {
-    pub fn new(search_paths: Vec<String>) -> Self {
+    pub fn new(filename: Option<String>, search_paths: &[String]) -> Self {
         let base_dialect = Rc::new(ChiaDialect::new(NO_NEG_DIV | NO_UNKNOWN_OPS));
         let base_runner = Rc::new(DefaultProgramRunner::new());
+
         CompilerOperators {
             base_dialect: base_dialect.clone(),
-            search_paths,
+            filename,
+            search_paths: search_paths.to_vec(),
             compile_outcomes: RefCell::new(HashMap::new()),
             dialect: RefCell::new(base_dialect),
             runner: RefCell::new(base_runner),
@@ -110,30 +140,35 @@ impl CompilerOperators {
         Err(EvalErr(sexp, "failed to write data".to_string()))
     }
 
+    fn get_compile_filename(&self, allocator: &mut Allocator) -> Response {
+        self.filename
+            .as_ref()
+            .map(|f| {
+                let converted_filename = allocator.new_atom(f.as_bytes())?;
+                Ok(Reduction(1, converted_filename))
+            })
+            .unwrap_or_else(|| Ok(Reduction(1, allocator.null())))
+    }
+
+    fn get_include_paths(&self, allocator: &mut Allocator) -> Response {
+        let mut converted_search_paths = allocator.null();
+        for s in self.search_paths.iter().rev() {
+            let search_path_string = allocator.new_atom(s.as_bytes())?;
+            converted_search_paths =
+                allocator.new_pair(search_path_string, converted_search_paths)?;
+        }
+
+        Ok(Reduction(1, converted_search_paths))
+    }
+
     fn get_full_path_for_filename(&self, allocator: &mut Allocator, sexp: NodePtr) -> Response {
         if let SExp::Pair(l, _r) = allocator.sexp(sexp) {
             if let SExp::Atom(b) = allocator.sexp(l) {
                 let filename =
                     Bytes::new(Some(BytesFromType::Raw(allocator.buf(&b).to_vec()))).decode();
-                for path in &self.search_paths {
-                    let mut path_buf = PathBuf::new();
-                    path_buf.push(path);
-                    path_buf.push(filename.clone());
-                    let f_path = path_buf.as_path();
-                    if f_path.exists() {
-                        return f_path
-                            .to_str()
-                            .map(Ok)
-                            .unwrap_or_else(|| {
-                                Err(EvalErr(sexp, "could not compute absolute path".to_string()))
-                            })
-                            .and_then(|p| {
-                                allocator
-                                    .new_atom(p.as_bytes())
-                                    .map(|res| Reduction(1, res))
-                            });
-                    }
-                }
+                let full_name = full_path_for_filename(sexp, &filename, &self.search_paths)?;
+                let converted_filename = allocator.new_atom(full_name.as_bytes())?;
+                return Ok(Reduction(1, converted_filename));
             }
         }
 
@@ -202,6 +237,10 @@ impl Dialect for CompilerOperators {
                     do_optimize(self.get_runner(), allocator, sexp)
                 } else if opbuf == "_set_symbol_table".as_bytes() {
                     self.set_symbol_table(allocator, sexp)
+                } else if opbuf == "_get_compile_filename".as_bytes() {
+                    self.get_compile_filename(allocator)
+                } else if opbuf == "_get_include_paths".as_bytes() {
+                    self.get_include_paths(allocator)
                 } else if opbuf == "_full_path_for_name".as_bytes() {
                     self.get_full_path_for_filename(allocator, sexp)
                 } else {
@@ -239,8 +278,11 @@ impl TRunProgram for CompilerOperators {
     }
 }
 
-pub fn run_program_for_search_paths(search_paths: &[String]) -> Rc<CompilerOperators> {
-    let ops = Rc::new(CompilerOperators::new(search_paths.to_vec()));
+pub fn run_program_for_search_paths(
+    filename: Option<String>,
+    search_paths: &[String],
+) -> Rc<CompilerOperators> {
+    let ops = Rc::new(CompilerOperators::new(filename, search_paths));
     ops.set_dialect(ops.clone());
     ops.set_runner(ops.clone());
     ops

@@ -235,8 +235,9 @@ fn rename_args_bodyform(b: &BodyForm) -> BodyForm {
 
 fn rename_in_helperform(namemap: &HashMap<Vec<u8>, Vec<u8>>, h: &HelperForm) -> HelperForm {
     match h {
-        HelperForm::Defconstant(l, n, body) => HelperForm::Defconstant(
+        HelperForm::Defconstant(l, kind, n, body) => HelperForm::Defconstant(
             l.clone(),
+            kind.clone(),
             n.to_vec(),
             Rc::new(rename_in_bodyform(namemap, body.clone())),
         ),
@@ -258,9 +259,12 @@ fn rename_in_helperform(namemap: &HashMap<Vec<u8>, Vec<u8>>, h: &HelperForm) -> 
 
 fn rename_args_helperform(h: &HelperForm) -> HelperForm {
     match h {
-        HelperForm::Defconstant(l, n, body) => {
-            HelperForm::Defconstant(l.clone(), n.clone(), Rc::new(rename_args_bodyform(body)))
-        }
+        HelperForm::Defconstant(l, kind, n, body) => HelperForm::Defconstant(
+            l.clone(),
+            kind.clone(),
+            n.clone(),
+            Rc::new(rename_args_bodyform(body)),
+        ),
         HelperForm::Defmacro(l, n, arg, body) => {
             let mut new_names: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
             for x in invent_new_names_sexp(arg.clone()).iter() {

@@ -79,8 +79,14 @@ pub enum BodyForm {
 }
 
 #[derive(Clone, Debug)]
+pub enum ConstantKind {
+    Complex,
+    Simple,
+}
+
+#[derive(Clone, Debug)]
 pub enum HelperForm {
-    Defconstant(Srcloc, Vec<u8>, Rc<BodyForm>),
+    Defconstant(Srcloc, ConstantKind, Vec<u8>, Rc<BodyForm>),
     Defmacro(Srcloc, Vec<u8>, Rc<SExp>, Rc<CompileForm>),
     Defun(Srcloc, Vec<u8>, bool, Rc<SExp>, Rc<BodyForm>),
 }
@@ -124,6 +130,7 @@ pub trait CompilerOpts {
     fn frontend_opt(&self) -> bool;
     fn start_env(&self) -> Option<Rc<SExp>>;
     fn prim_map(&self) -> Rc<HashMap<Vec<u8>, Rc<SExp>>>;
+    fn get_search_paths(&self) -> Vec<String>;
 
     fn set_search_paths(&self, dirs: &[String]) -> Rc<dyn CompilerOpts>;
     fn set_in_defun(&self, new_in_defun: bool) -> Rc<dyn CompilerOpts>;
@@ -137,7 +144,7 @@ pub trait CompilerOpts {
         &self,
         inc_from: String,
         filename: String,
-    ) -> Result<(String, String), CompileErr>;
+    ) -> Result<(String, Vec<u8>), CompileErr>;
     fn compile_program(
         &self,
         allocator: &mut Allocator,
@@ -204,7 +211,7 @@ impl CompileForm {
 impl HelperForm {
     pub fn name(&self) -> &Vec<u8> {
         match self {
-            HelperForm::Defconstant(_, name, _) => name,
+            HelperForm::Defconstant(_, _, name, _) => name,
             HelperForm::Defmacro(_, name, _, _) => name,
             HelperForm::Defun(_, name, _, _, _) => name,
         }
@@ -212,7 +219,7 @@ impl HelperForm {
 
     pub fn loc(&self) -> Srcloc {
         match self {
-            HelperForm::Defconstant(l, _, _) => l.clone(),
+            HelperForm::Defconstant(l, _, _, _) => l.clone(),
             HelperForm::Defmacro(l, _, _, _) => l.clone(),
             HelperForm::Defun(l, _, _, _, _) => l.clone(),
         }
@@ -220,14 +227,26 @@ impl HelperForm {
 
     pub fn to_sexp(&self) -> Rc<SExp> {
         match self {
-            HelperForm::Defconstant(loc, name, body) => Rc::new(list_to_cons(
-                loc.clone(),
-                &[
-                    Rc::new(SExp::atom_from_string(loc.clone(), "defconstant")),
-                    Rc::new(SExp::atom_from_vec(loc.clone(), name)),
-                    body.to_sexp(),
-                ],
-            )),
+            HelperForm::Defconstant(loc, ConstantKind::Simple, name, body) => {
+                Rc::new(list_to_cons(
+                    loc.clone(),
+                    &[
+                        Rc::new(SExp::atom_from_string(loc.clone(), "defconstant")),
+                        Rc::new(SExp::atom_from_vec(loc.clone(), name)),
+                        body.to_sexp(),
+                    ],
+                ))
+            }
+            HelperForm::Defconstant(loc, ConstantKind::Complex, name, body) => {
+                Rc::new(list_to_cons(
+                    loc.clone(),
+                    &[
+                        Rc::new(SExp::atom_from_string(loc.clone(), "defconst")),
+                        Rc::new(SExp::atom_from_vec(loc.clone(), name)),
+                        body.to_sexp(),
+                    ],
+                ))
+            }
             HelperForm::Defmacro(loc, name, _args, body) => Rc::new(SExp::Cons(
                 loc.clone(),
                 Rc::new(SExp::atom_from_string(loc.clone(), "defmacro")),

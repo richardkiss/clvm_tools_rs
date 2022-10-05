@@ -14,10 +14,11 @@ use crate::compiler::clvm::run;
 use crate::compiler::compiler::{is_at_capture, run_optimizer};
 use crate::compiler::comptypes::{
     fold_m, join_vecs_to_string, list_to_cons, Binding, BodyForm, Callable, CompileErr,
-    CompileForm, CompiledCode, CompilerOpts, DefunCall, HelperForm, InlineFunction, LetFormKind,
-    PrimaryCodegen,
+    CompileForm, CompiledCode, CompilerOpts, ConstantKind, DefunCall, HelperForm, InlineFunction,
+    LetFormKind, PrimaryCodegen,
 };
 use crate::compiler::debug::{build_swap_table_mut, relabel};
+use crate::compiler::evaluate::Evaluator;
 use crate::compiler::frontend::compile_bodyform;
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
@@ -900,7 +901,7 @@ fn start_codegen(
     // Start compiler with all macros and constants
     for h in comp.helpers.iter() {
         use_compiler = match h.borrow() {
-            HelperForm::Defconstant(loc, name, body) => {
+            HelperForm::Defconstant(loc, ConstantKind::Simple, name, body) => {
                 let expand_program = SExp::Cons(
                     loc.clone(),
                     Rc::new(SExp::Atom(loc.clone(), "mod".as_bytes().to_vec())),
@@ -934,6 +935,35 @@ fn start_codegen(
                     let quoted = primquote(loc.clone(), res);
                     use_compiler.add_constant(name, Rc::new(quoted))
                 })?
+            }
+            HelperForm::Defconstant(loc, ConstantKind::Complex, name, body) => {
+                let evaluator = Evaluator::new(opts.clone(), runner.clone(), comp.helpers.clone());
+                let constant_result = evaluator.shrink_bodyform(
+                    allocator,
+                    Rc::new(SExp::Nil(loc.clone())),
+                    &HashMap::new(),
+                    body.clone(),
+                    false,
+                )?;
+                if let BodyForm::Quoted(q) = constant_result.borrow() {
+                    use_compiler.add_constant(
+                        name,
+                        Rc::new(SExp::Cons(
+                            loc.clone(),
+                            Rc::new(SExp::Atom(loc.clone(), vec![1])),
+                            Rc::new(q.clone()),
+                        )),
+                    )
+                } else {
+                    return Err(CompileErr(
+                        loc.clone(),
+                        format!(
+                            "constant definition didn't reduce to constant value {}, got {}",
+                            h.to_sexp(),
+                            constant_result.to_sexp()
+                        ),
+                    ));
+                }
             }
             HelperForm::Defmacro(loc, name, _args, body) => {
                 let macro_program = Rc::new(SExp::Cons(

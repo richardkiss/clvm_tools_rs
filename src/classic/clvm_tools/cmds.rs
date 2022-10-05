@@ -25,7 +25,7 @@ use crate::classic::clvm::keyword_from_atom;
 use crate::classic::clvm::serialize::{sexp_from_stream, sexp_to_stream, SimpleCreateCLVMObject};
 use crate::classic::clvm::sexp::{enlist, proper_list, sexp_as_bin};
 use crate::classic::clvm_tools::binutils::{assemble_from_ir, disassemble, disassemble_with_kw};
-use crate::classic::clvm_tools::clvmc::detect_modern;
+use crate::classic::clvm_tools::clvmc::{detect_modern, write_sym_output};
 use crate::classic::clvm_tools::debug::{
     check_unused, trace_pre_eval, trace_to_table, trace_to_text,
 };
@@ -48,6 +48,7 @@ use crate::compiler::clvm::start_step;
 use crate::compiler::compiler::{compile_file, run_optimizer, DefaultCompilerOpts};
 use crate::compiler::comptypes::{CompileErr, CompilerOpts};
 use crate::compiler::debug::build_symbol_table_mut;
+use crate::compiler::preprocessor::gather_dependencies;
 use crate::compiler::prims;
 use crate::compiler::sexp;
 use crate::compiler::sexp::parse_sexp;
@@ -543,18 +544,6 @@ fn fix_log(
     }
 }
 
-fn write_sym_output(compiled_lookup: &HashMap<String, String>, path: &str) -> Result<(), String> {
-    m! {
-        output <- serde_json::to_string(compiled_lookup).map_err(|_| {
-            "failed to serialize to json".to_string()
-        });
-
-        fs::write(path, output).map_err(|_| {
-            format!("failed to write {}", path)
-        }).map(|_| ())
-    }
-}
-
 pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, default_stage: u32) {
     let props = TArgumentParserProps {
         description: "Execute a clvm script.".to_string(),
@@ -669,6 +658,12 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
             .set_action(TArgOptionAction::StoreTrue)
             .set_help("Only show frames along the exception path".to_string()),
     );
+    parser.add_argument(
+        vec!["-M".to_string(), "--dependencies".to_string()],
+        Argument::new()
+            .set_action(TArgOptionAction::StoreTrue)
+            .set_help("Visit dependencies and output a list of used files".to_string()),
+    );
 
     if tool_name == "run" {
         parser.add_argument(
@@ -697,29 +692,6 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         _ => keyword_from_atom(),
     };
 
-    let dpr;
-    let run_program: Rc<dyn TRunProgram>;
-    let mut search_paths = Vec::new();
-    match parsed_args.get("include") {
-        Some(ArgumentValue::ArgArray(v)) => {
-            let mut bare_paths = Vec::with_capacity(v.len());
-            for p in v {
-                if let ArgumentValue::ArgString(_, s) = p {
-                    bare_paths.push(s.to_string());
-                }
-            }
-            let special_runner = run_program_for_search_paths(&bare_paths);
-            search_paths = bare_paths;
-            dpr = special_runner.clone();
-            run_program = special_runner;
-        }
-        _ => {
-            let ordinary_runner = run_program_for_search_paths(&Vec::new());
-            dpr = ordinary_runner.clone();
-            run_program = ordinary_runner;
-        }
-    }
-
     let mut allocator = Allocator::new();
 
     let mut input_file = None;
@@ -733,6 +705,43 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     let mut input_program = "()".to_string();
     let mut input_args = "()".to_string();
 
+    let mut search_paths = Vec::new();
+
+    if let Some(ArgumentValue::ArgArray(v)) = parsed_args.get("include") {
+        for p in v {
+            if let ArgumentValue::ArgString(_, s) = p {
+                search_paths.push(s.to_string());
+            }
+        }
+    }
+
+    if let (
+        Some(ArgumentValue::ArgBool(true)),
+        Some(ArgumentValue::ArgString(file, file_content)),
+    ) = (
+        parsed_args.get("dependencies"),
+        parsed_args.get("path_or_code"),
+    ) {
+        if let Some(filename) = &file {
+            let opts = DefaultCompilerOpts::new(filename).set_search_paths(&search_paths);
+
+            match gather_dependencies(opts, filename, file_content) {
+                Err(e) => {
+                    stdout.write_str(&format!("{}: {}\n", e.0, e.1));
+                }
+                Ok(res) => {
+                    for r in res.iter() {
+                        stdout.write_str(r);
+                        stdout.write_str("\n");
+                    }
+                }
+            }
+        } else {
+            stdout.write_str("FAIL: must specify a filename\n");
+        }
+        return;
+    }
+
     if let Some(ArgumentValue::ArgString(file, path_or_code)) = parsed_args.get("path_or_code") {
         input_file = file.clone();
         input_program = path_or_code.to_string();
@@ -742,6 +751,10 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         input_file = file.clone();
         input_args = path_or_code.to_string();
     }
+
+    let special_runner = run_program_for_search_paths(input_file.clone(), &search_paths);
+    let dpr = special_runner.clone();
+    let run_program = special_runner;
 
     match parsed_args.get("hex") {
         Some(_) => {

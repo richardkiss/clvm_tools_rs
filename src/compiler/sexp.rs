@@ -207,7 +207,7 @@ fn make_atom(l: Srcloc, v: Vec<u8>) -> SExp {
     }
 }
 
-pub fn enlist(l: Srcloc, v: Vec<Rc<SExp>>) -> SExp {
+pub fn enlist(l: Srcloc, v: &[Rc<SExp>]) -> SExp {
     let mut result = SExp::Nil(l);
     for i_reverse in 0..v.len() {
         let i = v.len() - i_reverse - 1;
@@ -376,6 +376,14 @@ impl SExp {
         }
     }
 
+    pub fn atomize(&self) -> SExp {
+        match self {
+            SExp::Integer(l, i) => SExp::Atom(l.clone(), u8_from_number(i.clone())),
+            SExp::QuotedString(l, _, a) => SExp::Atom(l.clone(), a.clone()),
+            _ => self.clone(),
+        }
+    }
+
     pub fn equal_to(&self, other: &SExp) -> bool {
         if self.nilp() && other.nilp() {
             true
@@ -513,7 +521,7 @@ fn parse_sexp_step(loc: Srcloc, p: &SExpParseState, this_char: u8) -> SExpParseR
                     list_content.to_vec(),
                 )),
                 (')', SExpParseState::Empty) => emit(
-                    Rc::new(enlist(pl.clone(), list_content.to_vec())),
+                    Rc::new(enlist(pl.clone(), list_content)),
                     SExpParseState::Empty,
                 ),
                 (')', SExpParseState::Bareword(l, t)) => {
@@ -521,7 +529,7 @@ fn parse_sexp_step(loc: Srcloc, p: &SExpParseState, this_char: u8) -> SExpParseR
                     let mut updated_list = list_content.to_vec();
                     updated_list.push(Rc::new(parsed_atom));
                     emit(
-                        Rc::new(enlist(pl.clone(), updated_list)),
+                        Rc::new(enlist(pl.clone(), &updated_list)),
                         SExpParseState::Empty,
                     )
                 }
@@ -551,7 +559,7 @@ fn parse_sexp_step(loc: Srcloc, p: &SExpParseState, this_char: u8) -> SExpParseR
                     emit(list_content[0].clone(), SExpParseState::Empty)
                 } else {
                     emit(
-                        Rc::new(enlist(pl.clone(), list_content.to_vec())),
+                        Rc::new(enlist(pl.clone(), list_content)),
                         SExpParseState::Empty,
                     )
                 }
@@ -566,7 +574,7 @@ fn parse_sexp_step(loc: Srcloc, p: &SExpParseState, this_char: u8) -> SExpParseR
                             emit(Rc::new(new_tail), SExpParseState::Empty)
                         } else {
                             list_copy.push(Rc::new(new_tail));
-                            let new_list = enlist(pl.ext(l), list_copy);
+                            let new_list = enlist(pl.ext(l), &list_copy);
                             emit(Rc::new(new_list), SExpParseState::Empty)
                         }
                     }
