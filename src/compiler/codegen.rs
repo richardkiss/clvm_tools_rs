@@ -491,6 +491,20 @@ fn compile_call(
     }
 }
 
+fn is_originally_mentioned_identifier(
+    compiler: &PrimaryCodegen,
+    possible_loc: &Srcloc,
+    possible_name: &[u8]
+) -> bool {
+    compiler.mentioned_variable_names.iter().any(|v| {
+        if let SExp::Atom(l,name) = v.borrow() {
+            l == possible_loc && name == possible_name
+        } else {
+            false
+        }
+    })
+}
+
 pub fn generate_expr_code(
     allocator: &mut Allocator,
     runner: Rc<dyn TRunProgram>,
@@ -523,10 +537,10 @@ pub fn generate_expr_code(
                         create_name_lookup(compiler, l.clone(), atom)
                             .map(|f| Ok(CompiledCode(l.clone(), f)))
                             .unwrap_or_else(|_| {
-                                if opts.get_strict() {
+                                if opts.get_strict() && is_originally_mentioned_identifier(&compiler, &l, &atom) {
                                     // Don't allow unknown atoms as expressions
                                     // in strict mode.
-                                    return Err(CompileErr(l.clone(), format!("Unknown variable reference {}", decode_string(atom))));
+                                    return Err(CompileErr(l.clone(), format!("Unknown variable reference {}", v)));
                                 }
                                 // Pass through atoms that don't look up on behalf of
                                 // macros, as it's possible that a macro returned
@@ -568,6 +582,7 @@ pub fn generate_expr_code(
                     "created a call with no forms".to_string(),
                 ))
             } else {
+                eprintln!("compile_call {}", expr.to_sexp());
                 compile_call(allocator, runner, l.clone(), opts, compiler, list.to_vec())
             }
         }
@@ -711,6 +726,7 @@ pub fn empty_compiler(prim_map: Rc<HashMap<Vec<u8>, Rc<SExp>>>, l: Srcloc) -> Pr
         final_expr: Rc::new(BodyForm::Quoted(nil)),
         final_code: None,
         function_symbols: HashMap::new(),
+        mentioned_variable_names: Vec::new()
     }
 }
 
@@ -891,6 +907,34 @@ fn process_helper_let_bindings(
     result
 }
 
+fn collect_names_for_strict_body(pc: &mut PrimaryCodegen, b: &BodyForm) {
+    match b {
+        BodyForm::Value(v) => {
+            if let SExp::Atom(_,_) = v.borrow() {
+                pc.mentioned_variable_names.push(Rc::new(v.clone()));
+            }
+        },
+        BodyForm::Let(_, _, bindings, body) => {
+            for b in bindings.iter() {
+                collect_names_for_strict_body(pc, b.body.borrow());
+            }
+            collect_names_for_strict_body(pc, body.borrow());
+        },
+        BodyForm::Call(_, args) => {
+            for a in args.iter().skip(1) {
+                collect_names_for_strict_body(pc, a.borrow());
+            }
+        },
+        _ => { }
+    }
+}
+
+fn collect_names_for_strict_helper(pc: &mut PrimaryCodegen, h: &HelperForm) {
+    if let HelperForm::Defun(_, _, _, _, body) = h {
+        collect_names_for_strict_body(pc, body.borrow());
+    }
+}
+
 fn start_codegen(
     allocator: &mut Allocator,
     runner: Rc<dyn TRunProgram>,
@@ -904,6 +948,10 @@ fn start_codegen(
 
     // Start compiler with all macros and constants
     for h in comp.helpers.iter() {
+        if opts.get_strict() {
+            collect_names_for_strict_helper(&mut use_compiler, h.borrow());
+        }
+
         use_compiler = match h.borrow() {
             HelperForm::Defconstant(loc, name, body) => {
                 let expand_program = SExp::Cons(
@@ -992,6 +1040,8 @@ fn start_codegen(
             &live_helpers,
         )),
     };
+
+    collect_names_for_strict_body(&mut use_compiler, expr.borrow());
 
     use_compiler.to_process = let_helpers_with_expr.clone();
     use_compiler.orig_help = let_helpers_with_expr;

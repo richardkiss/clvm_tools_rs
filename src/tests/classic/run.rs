@@ -292,3 +292,41 @@ fn test_include_strict_modern_fail() {
 
     assert_eq!(result.find("Unknown variable reference X1").is_some(), true);
 }
+
+#[test]
+fn test_include_strict_with_if_fail() {
+    let result =
+        do_basic_run(&vec![
+            "run".to_string(),
+            "(mod () (include *strict*) (defun-inline foo (X) (if X (+ X1 1) ())) (foo 3))".to_string()
+        ])
+        .trim().to_string();
+
+    eprintln!("result {}", result);
+
+    assert_eq!(result.find("Unknown variable reference X1").is_some(), true);
+}
+
+#[test]
+fn test_include_strict_with_if_success() {
+    let result =
+        do_basic_run(&vec![
+            "run".to_string(),
+            "(mod () (include *strict*) (defun-inline foo (X) (if X (+ X 1) ())) (foo 3))".to_string()
+        ])
+        .trim().to_string();
+
+    assert_eq!(result.find("Unknown variable reference X").is_none(), true);
+}
+
+#[test]
+fn test_include_strict_with_list_fail() {
+    let result =
+        do_basic_run(&vec![
+            "run".to_string(),
+            "(mod (Y) (include *strict*) (defun-inline foo (X) (list X X Y)) (foo Y))".to_string()
+        ])
+        .trim().to_string();
+
+    assert_eq!(result.find("Unknown variable reference Y").is_none(), true);
+}
