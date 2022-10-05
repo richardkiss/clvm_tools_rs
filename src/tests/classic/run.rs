@@ -382,12 +382,28 @@ fn test_embed_file_8() {
         "resources/tests".to_string(),
         "(mod () (include *standard-cl-21*) (embed-file hello bin hello.bin) hello)".to_string(),
     ])
-    .trim()
-    .to_string();
+        .trim()
+        .to_string();
     let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
         .trim()
         .to_string();
     assert_eq!(run_result, "\"hello\"");
+}
+
+#[test]
+fn test_embed_file_9() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (embed-file hello bin hello.bin) (sha256 (sha256 hello)))".to_string(),
+    ])
+        .trim()
+        .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "0x9595c9df90075148eb06860365df33584b75bff782a510c6cd4883a419833d50");
 }
 
 fn run_dependencies(filename: &str) -> HashSet<String> {
@@ -445,14 +461,33 @@ fn test_treehash_constant() {
         "resources/tests".to_string(),
         "resources/tests/test_treehash_constant.cl".to_string(),
     ])
-    .trim()
-    .to_string();
+        .trim()
+        .to_string();
     let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
         .trim()
         .to_string();
     assert_eq!(
         result_hash,
         "0x34380f2097b86970818f8b026b68135d665babc5fda5afe577f86d51105e08b5"
+    );
+}
+
+#[test]
+fn test_treehash_constant_2() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/test_treehash_constant_2.cl".to_string(),
+    ])
+        .trim()
+        .to_string();
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0xe2954b5f459d1cffff293498f8263c961890a06fe28d6be1a0f08412164ced80"
     );
 }
 
@@ -464,13 +499,32 @@ fn test_treehash_constant_21() {
         "resources/tests".to_string(),
         "resources/tests/test_treehash_constant_21.cl".to_string(),
     ])
-    .trim()
-    .to_string();
+        .trim()
+        .to_string();
     let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
         .trim()
         .to_string();
     assert_eq!(
         result_hash,
         "0x34380f2097b86970818f8b026b68135d665babc5fda5afe577f86d51105e08b5"
+    );
+}
+
+#[test]
+fn test_treehash_constant_21_2() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/test_treehash_constant_21_2.cl".to_string(),
+    ])
+        .trim()
+        .to_string();
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0xe2954b5f459d1cffff293498f8263c961890a06fe28d6be1a0f08412164ced80"
     );
 }
