@@ -32,17 +32,19 @@ use crate::compiler::runtypes::RunFailure;
 #[derive(Debug, Clone)]
 pub enum DirectiveDetectionForm {
     ChooseDialect(i32),
-    ChooseStrict
+    ChooseStrict,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct SourceFileChoices {
     pub dialect: Option<i32>,
-    pub strict: bool
+    pub strict: bool,
 }
 
 impl SourceFileChoices {
-    pub fn new() -> Self { Default::default() }
+    pub fn new() -> Self {
+        Default::default()
+    }
 }
 
 fn include_dialect(
@@ -80,12 +82,16 @@ pub fn apply_choice(
     allocator: &mut Allocator,
     dialects: &HashMap<Vec<u8>, DirectiveDetectionForm>,
     choices: &mut SourceFileChoices,
-    elts: &[NodePtr]
+    elts: &[NodePtr],
 ) {
     match include_dialect(allocator, dialects, elts) {
-        Some(DirectiveDetectionForm::ChooseDialect(n)) => { choices.dialect = Some(n); },
-        Some(DirectiveDetectionForm::ChooseStrict) => { choices.strict = true; },
-        _ => { }
+        Some(DirectiveDetectionForm::ChooseDialect(n)) => {
+            choices.dialect = Some(n);
+        }
+        Some(DirectiveDetectionForm::ChooseStrict) => {
+            choices.strict = true;
+        }
+        _ => {}
     }
 }
 
@@ -93,7 +99,7 @@ fn detect_modern_rec(
     allocator: &mut Allocator,
     dialects: &HashMap<Vec<u8>, DirectiveDetectionForm>,
     choices: &mut SourceFileChoices,
-    sexp: NodePtr
+    sexp: NodePtr,
 ) {
     if let Some(l) = proper_list(allocator, sexp, true) {
         for elt in l.iter() {
@@ -119,9 +125,18 @@ fn detect_modern_rec(
 pub fn detect_modern(allocator: &mut Allocator, sexp: NodePtr) -> SourceFileChoices {
     let mut dialects = HashMap::new();
 
-    dialects.insert("*strict*".as_bytes().to_vec(), DirectiveDetectionForm::ChooseStrict);
-    dialects.insert("*standard-cl-21*".as_bytes().to_vec(), DirectiveDetectionForm::ChooseDialect(21));
-    dialects.insert("*standard-cl-22*".as_bytes().to_vec(), DirectiveDetectionForm::ChooseDialect(22));
+    dialects.insert(
+        "*strict*".as_bytes().to_vec(),
+        DirectiveDetectionForm::ChooseStrict,
+    );
+    dialects.insert(
+        "*standard-cl-21*".as_bytes().to_vec(),
+        DirectiveDetectionForm::ChooseDialect(21),
+    );
+    dialects.insert(
+        "*standard-cl-22*".as_bytes().to_vec(),
+        DirectiveDetectionForm::ChooseDialect(22),
+    );
 
     let mut choices = SourceFileChoices::new();
 

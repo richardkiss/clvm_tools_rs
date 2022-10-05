@@ -842,7 +842,9 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         .map(|a| matches!(a, ArgumentValue::ArgBool(true)))
         .unwrap_or(false);
 
-    let choices = input_sexp.map(|i| detect_modern(&mut allocator, i)).unwrap_or_else(Default::default);
+    let choices = input_sexp
+        .map(|i| detect_modern(&mut allocator, i))
+        .unwrap_or_else(Default::default);
     let mut stderr_output = |s: String| {
         if choices.dialect.is_some() {
             eprintln!("{}", s);
@@ -861,14 +863,16 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
             .as_ref()
             .cloned()
             .unwrap_or_else(|| "*command*".to_string());
-        let opts = Rc::new(DefaultCompilerOpts::new(&use_filename)).set_search_paths(&search_paths).set_strict(choices.strict);
+        let opts = Rc::new(DefaultCompilerOpts::new(&use_filename))
+            .set_search_paths(&search_paths)
+            .set_strict(choices.strict);
         match do_strict_checks(
             &mut allocator,
             run_program.clone(),
             opts,
             &input_program,
             do_check_unused,
-            choices.strict
+            choices.strict,
         ) {
             Ok((success, output)) => {
                 stderr_output(output);

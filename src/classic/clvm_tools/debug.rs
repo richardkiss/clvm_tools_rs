@@ -280,7 +280,7 @@ pub fn do_strict_checks(
     opts: Rc<dyn CompilerOpts>,
     input_program: &str,
     unused_variable: bool,
-    undefined_variable: bool
+    undefined_variable: bool,
 ) -> Result<(bool, String), CompileErr> {
     let mut output: Stream = Stream::new(None);
     let pre_forms = parse_sexp(Srcloc::start(&opts.filename()), input_program)
@@ -304,13 +304,7 @@ pub fn do_strict_checks(
 
     if undefined_variable {
         // the result is an error or generated code.
-        let _ = codegen(
-            allocator,
-            runner,
-            opts,
-            &g,
-            &mut HashMap::new()
-        )?;
+        let _ = codegen(allocator, runner, opts, &g, &mut HashMap::new())?;
     }
 
     Ok((true, output.get_value().decode()))

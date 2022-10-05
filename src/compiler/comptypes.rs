@@ -113,7 +113,7 @@ pub struct PrimaryCodegen {
     pub final_expr: Rc<BodyForm>,
     pub final_code: Option<CompiledCode>,
     pub function_symbols: HashMap<String, String>,
-    pub mentioned_variable_names: Vec<Rc<SExp>>
+    pub mentioned_variable_names: Vec<Rc<SExp>>,
 }
 
 pub trait CompilerOpts {

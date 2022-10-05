@@ -37,7 +37,7 @@ pub struct DefaultCompilerOpts {
     pub prim_map: Rc<HashMap<Vec<u8>, Rc<SExp>>>,
     pub strict: bool,
 
-    pub known_dialects: Rc<HashMap<String, String>>
+    pub known_dialects: Rc<HashMap<String, String>>,
 }
 
 fn fe_opt(
@@ -315,7 +315,7 @@ impl DefaultCompilerOpts {
         );
         known_dialects.insert(
             "*strict*".to_string(),
-            "( (defconstant *strict* 1) )".to_string()
+            "( (defconstant *strict* 1) )".to_string(),
         );
 
         DefaultCompilerOpts {

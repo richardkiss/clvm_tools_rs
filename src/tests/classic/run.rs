@@ -259,24 +259,24 @@ fn test_forms_of_destructuring_allowed_by_classic_1() {
 
 #[test]
 fn test_include_non_strict_no_fail() {
-    let result =
-        do_basic_run(&vec![
-            "run".to_string(),
-            "(mod () (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string()
-        ])
-        .trim().to_string();
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string(),
+    ])
+    .trim()
+    .to_string();
 
     assert_eq!(result.find("Unknown variable reference X1").is_none(), true);
 }
 
 #[test]
 fn test_include_strict_fail() {
-    let result =
-        do_basic_run(&vec![
-            "run".to_string(),
-            "(mod () (include *strict*) (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string()
-        ])
-        .trim().to_string();
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *strict*) (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string(),
+    ])
+    .trim()
+    .to_string();
 
     assert_eq!(result.find("Unknown variable reference X1").is_some(), true);
 }
@@ -295,12 +295,12 @@ fn test_include_strict_modern_fail() {
 
 #[test]
 fn test_include_strict_with_if_fail() {
-    let result =
-        do_basic_run(&vec![
-            "run".to_string(),
-            "(mod () (include *strict*) (defun-inline foo (X) (if X (+ X1 1) ())) (foo 3))".to_string()
-        ])
-        .trim().to_string();
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *strict*) (defun-inline foo (X) (if X (+ X1 1) ())) (foo 3))".to_string(),
+    ])
+    .trim()
+    .to_string();
 
     eprintln!("result {}", result);
 
@@ -309,24 +309,24 @@ fn test_include_strict_with_if_fail() {
 
 #[test]
 fn test_include_strict_with_if_success() {
-    let result =
-        do_basic_run(&vec![
-            "run".to_string(),
-            "(mod () (include *strict*) (defun-inline foo (X) (if X (+ X 1) ())) (foo 3))".to_string()
-        ])
-        .trim().to_string();
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *strict*) (defun-inline foo (X) (if X (+ X 1) ())) (foo 3))".to_string(),
+    ])
+    .trim()
+    .to_string();
 
     assert_eq!(result.find("Unknown variable reference X").is_none(), true);
 }
 
 #[test]
 fn test_include_strict_with_list_fail() {
-    let result =
-        do_basic_run(&vec![
-            "run".to_string(),
-            "(mod (Y) (include *strict*) (defun-inline foo (X) (list X X Y)) (foo Y))".to_string()
-        ])
-        .trim().to_string();
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod (Y) (include *strict*) (defun-inline foo (X) (list X X Y)) (foo Y))".to_string(),
+    ])
+    .trim()
+    .to_string();
 
     assert_eq!(result.find("Unknown variable reference Y").is_none(), true);
 }
