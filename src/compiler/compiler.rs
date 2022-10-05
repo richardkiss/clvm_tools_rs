@@ -41,6 +41,10 @@ lazy_static! {
         )"}
             .to_string(),
         );
+        known_dialects.insert(
+            "*strict*".to_string(),
+            "( (defconstant *strict* 1) )".to_string(),
+        );
         known_dialects
     };
 }
@@ -56,6 +60,7 @@ pub struct DefaultCompilerOpts {
     pub frontend_opt: bool,
     pub start_env: Option<Rc<SExp>>,
     pub prim_map: Rc<HashMap<Vec<u8>, Rc<SExp>>>,
+    pub strict: bool,
 }
 
 fn fe_opt(
@@ -209,6 +214,9 @@ impl CompilerOpts for DefaultCompilerOpts {
     fn get_search_paths(&self) -> Vec<String> {
         self.include_dirs.clone()
     }
+    fn get_strict(&self) -> bool {
+        self.strict
+    }
 
     fn set_search_paths(&self, dirs: &[String]) -> Rc<dyn CompilerOpts> {
         let mut copy = self.clone();
@@ -243,6 +251,11 @@ impl CompilerOpts for DefaultCompilerOpts {
     fn set_start_env(&self, start_env: Option<Rc<SExp>>) -> Rc<dyn CompilerOpts> {
         let mut copy = self.clone();
         copy.start_env = start_env;
+        Rc::new(copy)
+    }
+    fn set_strict(&self, strict: bool) -> Rc<dyn CompilerOpts> {
+        let mut copy = self.clone();
+        copy.strict = strict;
         Rc::new(copy)
     }
 
@@ -321,6 +334,7 @@ impl DefaultCompilerOpts {
             frontend_opt: false,
             start_env: None,
             prim_map: Rc::new(prim_map),
+            strict: false,
         }
     }
 }

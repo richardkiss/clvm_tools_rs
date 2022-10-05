@@ -434,6 +434,18 @@ fn run_dependencies(filename: &str) -> HashSet<String> {
 }
 
 #[test]
+fn test_include_non_strict_no_fail() {
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string(),
+    ])
+    .trim()
+    .to_string();
+
+    assert_eq!(result.find("Unknown variable reference X1").is_none(), true);
+}
+
+#[test]
 fn test_get_dependencies_1() {
     let dep_set = run_dependencies("resources/tests/singleton_top_layer.clvm");
 
@@ -530,4 +542,66 @@ fn test_treehash_constant_21_2() {
         result_hash,
         "0xe2954b5f459d1cffff293498f8263c961890a06fe28d6be1a0f08412164ced80"
     );
+}
+
+#[test]
+fn test_include_strict_fail() {
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *strict*) (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string(),
+    ])
+    .trim()
+    .to_string();
+
+    assert_eq!(result.find("Unknown variable reference X1").is_some(), true);
+}
+
+#[test]
+fn test_include_strict_modern_fail() {
+    let result =
+        do_basic_run(&vec![
+            "run".to_string(),
+            "(mod () (include *strict*) (include *standard-cl-21*) (defun-inline foo (X) (+ X1 1)) (foo 3))".to_string()
+        ])
+        .trim().to_string();
+
+    assert_eq!(result.find("Unknown variable reference X1").is_some(), true);
+}
+
+#[test]
+fn test_include_strict_with_if_fail() {
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *strict*) (defun-inline foo (X) (if X (+ X1 1) ())) (foo 3))".to_string(),
+    ])
+    .trim()
+    .to_string();
+
+    eprintln!("result {}", result);
+
+    assert_eq!(result.find("Unknown variable reference X1").is_some(), true);
+}
+
+#[test]
+fn test_include_strict_with_if_success() {
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod () (include *strict*) (defun-inline foo (X) (if X (+ X 1) ())) (foo 3))".to_string(),
+    ])
+    .trim()
+    .to_string();
+
+    assert_eq!(result.find("Unknown variable reference X").is_none(), true);
+}
+
+#[test]
+fn test_include_strict_with_list_fail() {
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "(mod (Y) (include *strict*) (defun-inline foo (X) (list X X Y)) (foo Y))".to_string(),
+    ])
+    .trim()
+    .to_string();
+
+    assert_eq!(result.find("Unknown variable reference Y").is_none(), true);
 }
