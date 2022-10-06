@@ -28,7 +28,7 @@ fn nft_opc() {
 fn large_odd_sized_neg_opc() {
     let mut allocator = Allocator::new();
     let result = OpcConversion {}
-        .invoke(&mut allocator, &"(-9999999999999999999999)".to_string())
+    .invoke(&mut allocator, &"(-9999999999999999999999)".to_string())
         .unwrap();
     assert_eq!(result.rest(), "ff8afde1e61f36454dc0000180");
 }
@@ -37,9 +37,27 @@ fn large_odd_sized_neg_opc() {
 fn large_odd_sized_neg_opd() {
     let mut allocator = Allocator::new();
     let result = OpdConversion {}
-        .invoke(&mut allocator, &"ff8afde1e61f36454dc0000180".to_string())
+    .invoke(&mut allocator, &"ff8afde1e61f36454dc0000180".to_string())
         .unwrap();
     assert_eq!(result.rest(), "(0xfde1e61f36454dc00001)");
+}
+
+#[test]
+fn large_odd_sized_pos_opc() {
+    let mut allocator = Allocator::new();
+    let result = OpcConversion {}
+        .invoke(&mut allocator, &"(281474976710655)".to_string())
+        .unwrap();
+    assert_eq!(result.rest(), "ff8700ffffffffffff80");
+}
+
+#[test]
+fn large_odd_sized_pos_opd() {
+    let mut allocator = Allocator::new();
+    let result = OpdConversion {}
+    .invoke(&mut allocator, &"ff8700ffffffffffff80".to_string())
+        .unwrap();
+    assert_eq!(result.rest(), "(0x00ffffffffffff)");
 }
 
 #[test]
