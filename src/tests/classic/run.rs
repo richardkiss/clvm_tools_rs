@@ -1,8 +1,11 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use clvmr::allocator::Allocator;
+
 use crate::classic::clvm::__type_compatibility__::Stream;
-use crate::classic::clvm_tools::cmds::launch_tool;
+use crate::classic::clvm_tools::cmds::{launch_tool, OpcConversion, OpdConversion, TConversion};
+use crate::classic::clvm_tools::sha256tree::sha256tree;
 
 use crate::compiler::sexp::decode_string;
 
@@ -515,6 +518,9 @@ fn test_treehash_constant_21() {
 
 #[test]
 fn test_treehash_constant_21_2() {
+    let mut allocator = Allocator::new();
+    let expected_hash = "0xe2954b5f459d1cffff293498f8263c961890a06fe28d6be1a0f08412164ced80";
+
     let result_text = do_basic_run(&vec![
         "run".to_string(),
         "-i".to_string(),
@@ -526,8 +532,23 @@ fn test_treehash_constant_21_2() {
     let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
         .trim()
         .to_string();
-    assert_eq!(
-        result_hash,
-        "0xe2954b5f459d1cffff293498f8263c961890a06fe28d6be1a0f08412164ced80"
-    );
+
+    assert_eq!(result_hash, expected_hash);
+
+    // Test that run matches
+    let compiled = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/secret_number2.cl".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let hexed = OpcConversion {}.invoke(&mut allocator, &compiled).unwrap();
+    let sexp = OpdConversion {}
+        .invoke(&mut allocator, &hexed.rest())
+        .unwrap();
+    let tree_hash = format!("0x{}", sha256tree(&mut allocator, *sexp.first()).hex());
+
+    assert_eq!(tree_hash, expected_hash);
 }
