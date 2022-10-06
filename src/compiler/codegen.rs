@@ -588,7 +588,6 @@ pub fn generate_expr_code(
                     "created a call with no forms".to_string(),
                 ))
             } else {
-                eprintln!("compile_call {}", expr.to_sexp());
                 compile_call(allocator, runner, l.clone(), opts, compiler, list.to_vec())
             }
         }
