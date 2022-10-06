@@ -647,10 +647,10 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
             .set_help("Maximum cost".to_string()),
     );
     parser.add_argument(
-        vec!["-O".to_string(), "--optimize".to_string()],
+        vec!["-O0".to_string(), "--no-optimize".to_string()],
         Argument::new()
             .set_action(TArgOptionAction::StoreTrue)
-            .set_help("run optimizer".to_string()),
+            .set_help("don't run optimizer".to_string()),
     );
     parser.add_argument(
         vec!["--only-exn".to_string()],
@@ -903,9 +903,9 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     // In testing: short circuit for modern compilation.
     if let Some(dialect) = choices.dialect {
         let do_optimize = parsed_args
-            .get("optimize")
-            .map(|x| matches!(x, ArgumentValue::ArgBool(true)))
-            .unwrap_or_else(|| false);
+            .get("no_optimize")
+            .map(|x| !matches!(x, ArgumentValue::ArgBool(true)))
+            .unwrap_or_else(|| true);
         let runner = Rc::new(DefaultProgramRunner::new());
         let use_filename = input_file.unwrap_or_else(|| "*command*".to_string());
         let opts = Rc::new(DefaultCompilerOpts::new(&use_filename))
