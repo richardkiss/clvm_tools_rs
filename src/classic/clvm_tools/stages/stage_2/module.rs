@@ -170,19 +170,14 @@ fn parse_include(
         }
     }
 
-    let prog = assemble(
-        allocator,
-        "(_read (_full_path_for_name 1))"
-    )?;
-    let assembled_sexp = run_program.run_program(
-        allocator,
-        prog,
-        name,
-        None
-    )?;
+    let prog = assemble(allocator, "(_read (_full_path_for_name 1))")?;
+    let assembled_sexp = run_program.run_program(allocator, prog, name, None)?;
 
     match proper_list(allocator, assembled_sexp.1, true) {
-        None => { Err(EvalErr(name, "include returned malformed result".to_string())) },
+        None => Err(EvalErr(
+            name,
+            "include returned malformed result".to_string(),
+        )),
         Some(assembled) => {
             for sexp in assembled {
                 parse_mod_sexp(
@@ -192,9 +187,9 @@ fn parse_include(
                     functions,
                     constants,
                     macros,
-                    run_program.clone()
+                    run_program.clone(),
                 )?;
-            };
+            }
             Ok(())
         }
     }
