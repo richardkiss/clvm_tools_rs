@@ -166,34 +166,41 @@ fn parse_include(
     macros: &mut Vec<(Vec<u8>, NodePtr)>,
     run_program: Rc<dyn TRunProgram>,
 ) -> Result<(), EvalErr> {
-    m! {
-        prog <- assemble(
-            allocator,
-            "(_read (_full_path_for_name 1))"
-        );
-        assembled_sexp <- run_program.run_program(
-            allocator,
-            prog,
-            name,
-            None
-        );
-        match proper_list(allocator, assembled_sexp.1, true) {
-            None => { Err(EvalErr(name, "include returned malformed result".to_string())) },
-            Some(assembled) => {
-                for sexp in assembled {
-                    parse_mod_sexp(
-                        allocator,
-                        sexp,
-                        namespace,
-                        functions,
-                        constants,
-                        delayed_constants,
-                        macros,
-                        run_program.clone()
-                    )?;
-                };
-                Ok(())
-            }
+    // Recognize and deal with special names
+    if let SExp::Atom(namebuf) = allocator.sexp(name) {
+        let name_bytes = allocator.buf(&namebuf);
+        if name_bytes == b"*strict*" {
+            return Ok(());
+        }
+    }
+
+    let prog = assemble(
+        allocator,
+        "(_read (_full_path_for_name 1))"
+    )?;
+    let assembled_sexp = run_program.run_program(
+        allocator,
+        prog,
+        name,
+        None
+    )?;
+
+    match proper_list(allocator, assembled_sexp.1, true) {
+        None => { Err(EvalErr(name, "include returned malformed result".to_string())) },
+        Some(assembled) => {
+            for sexp in assembled {
+                parse_mod_sexp(
+                    allocator,
+                    sexp,
+                    namespace,
+                    functions,
+                    constants,
+                    delayed_constants,
+                    macros,
+                    run_program.clone()
+                )?;
+            };
+            Ok(())
         }
     }
 }

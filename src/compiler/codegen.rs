@@ -25,7 +25,7 @@ use crate::compiler::inline::{replace_in_inline, synthesize_args};
 use crate::compiler::optimize::optimize_expr;
 use crate::compiler::prims::{primapply, primcons, primquote};
 use crate::compiler::runtypes::RunFailure;
-use crate::compiler::sexp::{decode_string, SExp};
+use crate::compiler::sexp::{decode_string, printable, SExp};
 use crate::compiler::srcloc::Srcloc;
 use crate::util::u8_from_number;
 
@@ -281,7 +281,9 @@ pub fn process_macro_call(
         let relabeled_expr = relabel(&swap_table, &v);
         compile_bodyform(Rc::new(relabeled_expr))
     })
-    .and_then(|body| generate_expr_code(allocator, runner, opts, compiler, Rc::new(body)))
+        // Set static false so we don't enforce strictness directly on macro
+        // output.
+    .and_then(|body| generate_expr_code(allocator, runner, opts.set_strict(false), compiler, Rc::new(body)))
 }
 
 fn generate_args_code(
@@ -448,7 +450,11 @@ fn compile_call(
                         .set_stdenv(false)
                         .set_in_defun(true)
                         .set_start_env(Some(compiler.env.clone()))
-                        .set_compiler(compiler.clone());
+                        .set_compiler(compiler.clone())
+                        // If strictness was turned off during macro expansion
+                        // Reenable here to run (com ...) in the parent's
+                        // context.
+                        .set_strict(!compiler.mentioned_variable_names.is_empty());
 
                     let use_body = SExp::Cons(
                         l.clone(),
@@ -915,8 +921,10 @@ fn process_helper_let_bindings(
 fn collect_names_for_strict_body(pc: &mut PrimaryCodegen, b: &BodyForm) {
     match b {
         BodyForm::Value(v) => {
-            if let SExp::Atom(_, _) = v.borrow() {
-                pc.mentioned_variable_names.push(Rc::new(v.clone()));
+            if let SExp::Atom(_, name) = v.borrow() {
+                if !name.is_empty() && printable(name) {
+                    pc.mentioned_variable_names.push(Rc::new(v.clone()));
+                }
             }
         }
         BodyForm::Let(_, _, bindings, body) => {

@@ -626,3 +626,18 @@ fn test_include_strict_with_list_fail() {
 
     assert_eq!(result.find("Unknown variable reference Y").is_none(), true);
 }
+
+#[test]
+fn test_assert_with_strict_succeed() {
+    let result = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod (Y) (include *strict*) (include assert.clib) (defun-inline foo (X Y) (list X X Y)) (assert (foo 3 Y)))".to_string(),
+    ])
+        .trim()
+        .to_string();
+
+    eprintln!("result {}", result);
+    assert_eq!(result.find(":").is_none(), true);
+}
