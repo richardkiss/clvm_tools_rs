@@ -281,9 +281,17 @@ pub fn process_macro_call(
         let relabeled_expr = relabel(&swap_table, &v);
         compile_bodyform(Rc::new(relabeled_expr))
     })
-        // Set static false so we don't enforce strictness directly on macro
-        // output.
-    .and_then(|body| generate_expr_code(allocator, runner, opts.set_strict(false), compiler, Rc::new(body)))
+    // Set static false so we don't enforce strictness directly on macro
+    // output.
+    .and_then(|body| {
+        generate_expr_code(
+            allocator,
+            runner,
+            opts.set_strict(false),
+            compiler,
+            Rc::new(body),
+        )
+    })
 }
 
 fn generate_args_code(
