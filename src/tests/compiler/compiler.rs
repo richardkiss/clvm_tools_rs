@@ -31,7 +31,8 @@ fn run_string_maybe_opt(
     opts = opts
         .set_frontend_opt(fe_opt)
         .set_search_paths(&vec!["resources/tests".to_string()]);
-    let sexp_args = parse_sexp(srcloc.clone(), &args).map_err(|e| CompileErr(e.0, e.1))?[0].clone();
+    let sexp_args =
+        parse_sexp(srcloc.clone(), args.bytes()).map_err(|e| CompileErr(e.0, e.1))?[0].clone();
 
     compile_file(
         &mut allocator,
@@ -1056,4 +1057,38 @@ fn test_modern_inline_at_capture() {
     .unwrap_err();
 
     assert_eq!(result.1, "clvm raise in (8 5) (() 99)");
+}
+
+#[test]
+fn test_modern_inline_recurse() {
+    // Test for a crash doing a recursive inline call.
+    run_string(
+        &"(mod () (include *standard-cl-21*) (defun-inline FOO (X) (FOO (+ X 1))) (FOO 3))"
+            .to_string(),
+        &"()".to_string(),
+    )
+    .unwrap_err();
+}
+
+#[test]
+fn test_modern_inline_recurse_deep() {
+    // Test for a crash doing a recursive inline call.
+    run_string(
+        &"(mod () (include *standard-cl-21*) (defun-inline BAR (X) (FOO (- X 1))) (defun-inline FOO (X) (BAR (+ X 1))) (FOO 3))".to_string(),
+        &"()".to_string()
+    ).unwrap_err();
+}
+
+#[test]
+fn test_modern_mod_form() {
+    let result = run_string(
+        &indoc! {"
+(mod () (include *standard-cl-21*) (a (mod (X) (+ 1 (* X 2))) (list 3)))
+"}
+        .to_string(),
+        &"()".to_string(),
+    )
+    .unwrap();
+
+    assert_eq!(result.to_string(), "7");
 }

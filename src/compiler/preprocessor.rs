@@ -38,7 +38,7 @@ pub fn process_include(
 
     let start_of_file = Srcloc::start(name);
 
-    parse_sexp(start_of_file.clone(), &decode_string(&content))
+    parse_sexp(start_of_file.clone(), content.iter().copied())
         .map_err(|e| CompileErr(e.0.clone(), e.1))
         .and_then(|x| match x[0].proper_list() {
             None => Err(CompileErr(
@@ -100,7 +100,7 @@ fn process_embed(
         )
         .map_err(run_to_compile_err)?,
         IncludeProcessType::SExpression => {
-            let parsed = parse_sexp(Srcloc::start(&full_name), &decode_string(&content))
+            let parsed = parse_sexp(Srcloc::start(&full_name), content.iter().copied())
                 .map_err(|e| CompileErr(e.0, e.1))?;
             if parsed.len() != 1 {
                 return Err(CompileErr(loc, format!("More than one form in {}", fname)));
@@ -139,7 +139,7 @@ fn process_pp_form(
         }
 
         let (full_name, content) = opts.read_new_file(opts.filename(), fname.to_string())?;
-        let parsed = parse_sexp(Srcloc::start(&full_name), &decode_string(&content))
+        let parsed = parse_sexp(Srcloc::start(&full_name), content.iter().copied())
             .map_err(|e| CompileErr(e.0, e.1))?;
         if parsed.is_empty() {
             return Ok(vec![]);
@@ -326,7 +326,7 @@ pub fn gather_dependencies(
     let mut result_deps = Vec::new();
     let loc = Srcloc::start(real_input_path);
 
-    let parsed = parse_sexp(loc.clone(), file_content).map_err(|e| CompileErr(e.0, e.1))?;
+    let parsed = parse_sexp(loc.clone(), file_content.bytes()).map_err(|e| CompileErr(e.0, e.1))?;
 
     if parsed.is_empty() {
         return Ok(vec![]);

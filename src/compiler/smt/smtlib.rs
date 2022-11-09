@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use rsmt2::{Logic, Solver};
 use rsmt2::errors::{Error, ErrorKind, SmtRes};
+use rsmt2::{Logic, Solver};
 
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero};
 use crate::compiler::sexp::{decode_string, SExp};
@@ -54,7 +54,7 @@ lazy_static! {
 }
 
 pub struct SMTSolver {
-    solver: Solver<()>
+    solver: Solver<()>,
 }
 
 fn to_u8(i: &Number) -> u8 {
@@ -62,14 +62,14 @@ fn to_u8(i: &Number) -> u8 {
     if d.is_empty() {
         0
     } else {
-        d[d.len()-1] as u8
+        d[d.len() - 1] as u8
     }
 }
 
 impl SMTSolver {
     pub fn new() -> SmtRes<Self> {
         Ok(SMTSolver {
-            solver: Solver::default_z3(())?
+            solver: Solver::default_z3(())?,
         })
     }
 
@@ -90,59 +90,50 @@ impl SMTSolver {
         // define-sort
         // define-fun
         // check_sat
-        let p =
-            if let Some(p) = stmt.proper_list() {
-                Ok(p)
-            } else {
-                Err(Error::from_kind(
-                    ErrorKind::ParseError(
-                        stmt.to_string(),
-                        "Improper list".to_string()
-                    )
-                ))
-            }?;
+        let p = if let Some(p) = stmt.proper_list() {
+            Ok(p)
+        } else {
+            Err(Error::from_kind(ErrorKind::ParseError(
+                stmt.to_string(),
+                "Improper list".to_string(),
+            )))
+        }?;
         if p.is_empty() {
-            return Err(Error::from_kind(
-                ErrorKind::ParseError(
-                    stmt.to_string(),
-                    "Empty list".to_string()
-                )
-            ));
+            return Err(Error::from_kind(ErrorKind::ParseError(
+                stmt.to_string(),
+                "Empty list".to_string(),
+            )));
         }
 
-        let op =
-            if let SExp::Atom(_,op) = &p[0] {
-                Ok(op.clone())
-            } else {
-                Err(Error::from_kind(
-                    ErrorKind::ParseError(
-                        stmt.to_string(),
-                        "not a keyword starting the statement".to_string()
-                    )
-                ))
-            }?;
+        let op = if let SExp::Atom(_, op) = &p[0] {
+            Ok(op.clone())
+        } else {
+            Err(Error::from_kind(ErrorKind::ParseError(
+                stmt.to_string(),
+                "not a keyword starting the statement".to_string(),
+            )))
+        }?;
 
         eprintln!("op {}", decode_string(&op));
 
         if op == b"set-logic" && p.len() == 2 {
-            if let SExp::Atom(_,name) = &p[1] {
+            if let SExp::Atom(_, name) = &p[1] {
                 if let Some(l) = LOGICS.get(&decode_string(&name)) {
                     self.solver.set_logic(l.clone())?;
                     return done;
                 }
             }
         } else if op == b"declare-const" && p.len() == 3 {
-            if let SExp::Atom(_,name) = &p[1] {
-                self.solver.declare_const(decode_string(&name), p[2].to_string())?;
+            if let SExp::Atom(_, name) = &p[1] {
+                self.solver
+                    .declare_const(decode_string(&name), p[2].to_string())?;
                 return done;
             }
 
-            return Err(Error::from_kind(
-                ErrorKind::ParseError(
-                    stmt.to_string(),
-                    "name wasn't an atom".to_string()
-                )
-            ));
+            return Err(Error::from_kind(ErrorKind::ParseError(
+                stmt.to_string(),
+                "name wasn't an atom".to_string(),
+            )));
         } else if op == b"assert" && p.len() == 2 {
             self.solver.assert(p[1].to_string())?;
             return done;
@@ -150,75 +141,72 @@ impl SMTSolver {
             self.solver.reset()?;
             return done;
         } else if op == b"push" && p.len() == 2 {
-            if let SExp::Integer(_,i) = &p[1] {
+            if let SExp::Integer(_, i) = &p[1] {
                 let n = to_u8(&i);
                 self.solver.push(n)?;
                 return done;
             }
         } else if op == b"pop" && p.len() == 2 {
-            if let SExp::Integer(_,i) = &p[1] {
+            if let SExp::Integer(_, i) = &p[1] {
                 let n = to_u8(&i);
                 self.solver.pop(n)?;
                 return done;
             }
         } else if op == b"declare-sort" && p.len() == 3 {
-            if let (SExp::Atom(_,name), SExp::Integer(_,i)) = (&p[1], &p[2]) {
+            if let (SExp::Atom(_, name), SExp::Integer(_, i)) = (&p[1], &p[2]) {
                 let n = to_u8(&i);
                 self.solver.declare_sort(decode_string(&name), n)?;
                 return done;
             }
         } else if op == b"declare-fun" && p.len() == 4 {
-            if let (SExp::Atom(_,name), Some(lst)) =
-                (&p[1], p[2].proper_list())
-            {
+            if let (SExp::Atom(_, name), Some(lst)) = (&p[1], p[2].proper_list()) {
                 let mut argvec = Vec::new();
                 for a in lst.iter() {
                     argvec.push(a.to_string());
                 }
-                self.solver.declare_fun(decode_string(&name), &argvec, p[3].to_string())?;
+                self.solver
+                    .declare_fun(decode_string(&name), &argvec, p[3].to_string())?;
                 return done;
             }
         } else if op == b"define-sort" && p.len() == 4 {
-            if let (SExp::Atom(_,name), Some(lst)) =
-                (&p[1], p[2].proper_list())
-            {
+            if let (SExp::Atom(_, name), Some(lst)) = (&p[1], p[2].proper_list()) {
                 let mut argvec = Vec::new();
                 for a in lst.iter() {
-                    if let SExp::Atom(_,name) = a {
+                    if let SExp::Atom(_, name) = a {
                         argvec.push(decode_string(&name));
                     } else {
-                        return Err(Error::from_kind(
-                            ErrorKind::ParseError(
-                                stmt.to_string(),
-                                "non-symbol argument".to_string()
-                            )
-                        ));
+                        return Err(Error::from_kind(ErrorKind::ParseError(
+                            stmt.to_string(),
+                            "non-symbol argument".to_string(),
+                        )));
                     }
                 }
-                self.solver.define_sort(decode_string(&name), &argvec, p[3].to_string())?;
+                self.solver
+                    .define_sort(decode_string(&name), &argvec, p[3].to_string())?;
                 return done;
             }
         } else if op == b"define-fun" && p.len() == 5 {
-            if let (SExp::Atom(_,name), Some(lst)) =
-                (&p[1], p[2].proper_list())
-            {
+            if let (SExp::Atom(_, name), Some(lst)) = (&p[1], p[2].proper_list()) {
                 let mut argvec = Vec::new();
                 for a in lst.iter() {
                     if let Some(alst) = a.proper_list() {
                         if alst.len() != 2 {
-                            return Err(Error::from_kind(
-                                ErrorKind::ParseError(
-                                    stmt.to_string(),
-                                    "non-pair argument".to_string()
-                                )
-                            ));
+                            return Err(Error::from_kind(ErrorKind::ParseError(
+                                stmt.to_string(),
+                                "non-pair argument".to_string(),
+                            )));
                         }
-                        if let SExp::Atom(_,aname) = &alst[0] {
+                        if let SExp::Atom(_, aname) = &alst[0] {
                             argvec.push((decode_string(&aname), alst[1].to_string()));
                         }
                     }
                 }
-                self.solver.define_fun(decode_string(&name), &argvec, p[3].to_string(), p[4].to_string())?;
+                self.solver.define_fun(
+                    decode_string(&name),
+                    &argvec,
+                    p[3].to_string(),
+                    p[4].to_string(),
+                )?;
                 return done;
             }
         } else if op == b"check-sat" {
@@ -231,11 +219,9 @@ impl SMTSolver {
             });
         }
 
-        Err(Error::from_kind(
-            ErrorKind::ParseError(
-                stmt.to_string(),
-                "unrecognized keyword".to_string()
-            )
-        ))
+        Err(Error::from_kind(ErrorKind::ParseError(
+            stmt.to_string(),
+            "unrecognized keyword".to_string(),
+        )))
     }
 }

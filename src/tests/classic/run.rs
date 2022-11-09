@@ -10,7 +10,7 @@ use rand::Rng;
 use rand_chacha::ChaChaRng;
 
 use std::borrow::Borrow;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -22,10 +22,9 @@ use crate::classic::clvm_tools::cmds::{launch_tool, OpcConversion, OpdConversion
 use crate::classic::clvm_tools::node_path::NodePath;
 use crate::classic::clvm_tools::sha256tree::sha256tree;
 
-use crate::compiler::sexp::decode_string;
-
 use crate::compiler::clvm::convert_to_clvm_rs;
 use crate::compiler::sexp;
+use crate::compiler::sexp::decode_string;
 use crate::util::{number_from_u8, Number};
 
 const NUM_GEN_ATOMS: usize = 16;
@@ -683,12 +682,27 @@ fn test_divmod() {
 }
 
 #[cfg(test)]
-struct RandomClvmNumber {
-    intended_value: Number,
+pub struct RandomClvmNumber {
+    pub intended_value: Number,
+}
+
+#[test]
+fn test_classic_mod_form() {
+    let res = do_basic_run(&vec![
+        "run".to_string(),
+        indoc! {"
+(mod () (a (mod (X) (+ 1 (* X 2))) (list 3)))
+"}
+        .to_string(),
+        "()".to_string(),
+    ])
+    .trim()
+    .to_string();
+    assert_eq!(res, "(q . 7)");
 }
 
 #[cfg(test)]
-fn random_clvm_number<R: Rng + ?Sized>(rng: &mut R) -> RandomClvmNumber {
+pub fn random_clvm_number<R: Rng + ?Sized>(rng: &mut R) -> RandomClvmNumber {
     // Make a number by creating some random atom bytes.
     // Set high bit randomly.
     let natoms = rng.gen_range(0..=NUM_GEN_ATOMS);

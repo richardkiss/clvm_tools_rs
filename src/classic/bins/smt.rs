@@ -1,8 +1,8 @@
 use std::env;
 
 use clvm_tools_rs::compiler::sexp::parse_sexp;
-use clvm_tools_rs::compiler::srcloc::Srcloc;
 use clvm_tools_rs::compiler::smt::smtlib::SMTSolver;
+use clvm_tools_rs::compiler::srcloc::Srcloc;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -15,15 +15,13 @@ fn main() {
     };
 
     for a in args.iter().skip(1) {
-        match parse_sexp(loc.clone(), &a) {
-            Ok(l) => {
-                match solver.run_stmt(&l[0]) {
-                    Ok(res) => {
-                        println!("{}", res);
-                    },
-                    Err(e) => {
-                        println!("error {:?}", e);
-                    }
+        match parse_sexp(loc.clone(), a.bytes()) {
+            Ok(l) => match solver.run_stmt(&l[0]) {
+                Ok(res) => {
+                    println!("{}", res);
+                }
+                Err(e) => {
+                    println!("error {:?}", e);
                 }
             },
             Err(e) => {
