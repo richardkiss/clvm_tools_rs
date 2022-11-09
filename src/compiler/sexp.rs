@@ -66,11 +66,13 @@ pub fn random_sexp<R: Rng + ?Sized>(rng: &mut R, remaining: usize) -> SExp {
                 // list
                 let length = rng.gen_range(1..=remaining);
                 let costs = vec![remaining / length; length];
-                let collected_list: Vec<Rc<SExp>> = costs
-                    .iter()
-                    .map(|c| Rc::new(random_sexp(rng, *c)))
-                    .collect();
-                enlist(loc(), &collected_list)
+                enlist(
+                    loc(),
+                    costs
+                        .iter()
+                        .map(|c| Rc::new(random_sexp(rng, *c)))
+                        .collect(),
+                )
             }
             1 => {
                 // cons
