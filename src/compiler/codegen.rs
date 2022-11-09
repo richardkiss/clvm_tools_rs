@@ -994,7 +994,7 @@ fn collect_names_for_strict_body(pc: &mut PrimaryCodegen, b: &BodyForm) {
             for b in letdata.bindings.iter() {
                 collect_names_for_strict_body(pc, b.body.borrow());
             }
-            collect_names_for_strict_body(pc, letdata.body.borrow());
+            collect_names_for_strict_body(pc, &letdata.body);
         }
         BodyForm::Call(_, args) => {
             for a in args.iter().skip(1) {
@@ -1007,7 +1007,7 @@ fn collect_names_for_strict_body(pc: &mut PrimaryCodegen, b: &BodyForm) {
 
 fn collect_names_for_strict_helper(pc: &mut PrimaryCodegen, h: &HelperForm) {
     if let HelperForm::Defun(_, defun) = h {
-        collect_names_for_strict_body(pc, defun.body.borrow());
+        collect_names_for_strict_body(pc, &defun.body);
     }
 }
 
