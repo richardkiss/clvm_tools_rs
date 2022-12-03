@@ -443,6 +443,8 @@ fn run_dependencies(filename: &str) -> HashSet<String> {
     .trim()
     .to_string();
 
+    eprintln!("run_dependencies:\n{}", result_text);
+
     let mut dep_set = HashSet::new();
     for l in result_text.lines() {
         if let Some(suffix_start) = l.find("resources/tests") {

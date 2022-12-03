@@ -51,7 +51,7 @@ use crate::compiler::debug::build_symbol_table_mut;
 use crate::compiler::preprocessor::gather_dependencies;
 use crate::compiler::prims;
 use crate::compiler::sexp;
-use crate::compiler::sexp::parse_sexp;
+use crate::compiler::sexp::{parse_sexp, decode_string};
 use crate::compiler::srcloc::Srcloc;
 use crate::util::collapse;
 
@@ -647,10 +647,10 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
             .set_help("Maximum cost".to_string()),
     );
     parser.add_argument(
-        vec!["-O0".to_string(), "--no-optimize".to_string()],
+        vec!["-O".to_string(), "--optimize".to_string()],
         Argument::new()
             .set_action(TArgOptionAction::StoreTrue)
-            .set_help("don't run optimizer".to_string()),
+            .set_help("run optimizer".to_string()),
     );
     parser.add_argument(
         vec!["--only-exn".to_string()],
@@ -731,7 +731,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
                 }
                 Ok(res) => {
                     for r in res.iter() {
-                        stdout.write_str(r);
+                        stdout.write_str(&decode_string(&r.name));
                         stdout.write_str("\n");
                     }
                 }
@@ -887,7 +887,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     // In testing: short circuit for modern compilation.
     if let Some(dialect) = dialect {
         let do_optimize = parsed_args
-            .get("no_optimize")
+            .get("optimize")
             .map(|x| !matches!(x, ArgumentValue::ArgBool(true)))
             .unwrap_or_else(|| true);
         let runner = Rc::new(DefaultProgramRunner::new());

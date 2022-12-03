@@ -28,7 +28,7 @@ use crate::compiler::comptypes::CompilerOpts;
 use crate::compiler::preprocessor::gather_dependencies;
 use crate::compiler::prims;
 use crate::compiler::runtypes::RunFailure;
-use crate::compiler::sexp::SExp;
+use crate::compiler::sexp::{SExp, decode_string};
 use crate::compiler::srcloc::Srcloc;
 
 use crate::py::pyval::{clvm_value_to_python, python_value_to_clvm};
@@ -108,8 +108,10 @@ fn check_dependencies(input_path: &PyAny, search_paths: Vec<String>) -> PyResult
         Rc::new(DefaultCompilerOpts::new(&real_input_path.to_string()));
     let opts = def_opts.set_search_paths(&search_paths);
 
-    let result_deps = gather_dependencies(opts, &real_input_path.to_string(), &file_content)
-        .map_err(|e| CompError::new_err(format!("{}: {}", e.0, e.1)))?;
+    let result_deps: Vec<String> =
+        gather_dependencies(opts, &real_input_path.to_string(), &file_content)
+        .map_err(|e| CompError::new_err(format!("{}: {}", e.0, e.1)))
+        .map(|rlist| rlist.iter().map(|i| decode_string(&i.name)).collect())?;
 
     // Return all visited files.
     Python::with_gil(|py| Ok(result_deps.into_py(py)))
