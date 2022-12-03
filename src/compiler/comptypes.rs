@@ -146,7 +146,7 @@ pub struct IncludeDesc {
     pub kw: Srcloc,
     pub nl: Srcloc,
     pub name: Vec<u8>,
-    pub kind: Option<IncludeProcessType>
+    pub kind: Option<IncludeProcessType>,
 }
 
 impl IncludeDesc {

@@ -51,7 +51,7 @@ use crate::compiler::debug::build_symbol_table_mut;
 use crate::compiler::preprocessor::gather_dependencies;
 use crate::compiler::prims;
 use crate::compiler::sexp;
-use crate::compiler::sexp::{parse_sexp, decode_string};
+use crate::compiler::sexp::{decode_string, parse_sexp};
 use crate::compiler::srcloc::Srcloc;
 use crate::util::collapse;
 

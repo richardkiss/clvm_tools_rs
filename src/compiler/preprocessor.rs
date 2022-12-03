@@ -68,7 +68,7 @@ fn process_embed(
             l,
             format!(
                 "failed to convert compiled clvm to expression: throw ({})",
-               x
+                x
             ),
         ),
         RunFailure::RunErr(l, e) => CompileErr(
@@ -122,7 +122,11 @@ fn process_pp_form(
     body: Rc<SExp>,
 ) -> Result<Vec<Rc<SExp>>, CompileErr> {
     // Support using the preprocessor to collect dependencies recursively.
-    let recurse_dependencies = |opts: Rc<dyn CompilerOpts>, includes: &mut Vec<IncludeDesc>, kind: IncludeProcessType, desc: IncludeDesc| -> Result<(), CompileErr> {
+    let recurse_dependencies = |opts: Rc<dyn CompilerOpts>,
+                                includes: &mut Vec<IncludeDesc>,
+                                kind: IncludeProcessType,
+                                desc: IncludeDesc|
+     -> Result<(), CompileErr> {
         let name_string = decode_string(&desc.name);
         if KNOWN_DIALECTS.contains_key(&name_string) {
             return Ok(());
@@ -253,7 +257,12 @@ fn process_pp_form(
 
     match include_type {
         Some(IncludeType::Basic(f)) => {
-            recurse_dependencies(opts.clone(), includes, IncludeProcessType::Compiled, f.clone())?;
+            recurse_dependencies(
+                opts.clone(),
+                includes,
+                IncludeProcessType::Compiled,
+                f.clone(),
+            )?;
             process_include(opts, f)
         }
         Some(IncludeType::Processed(f, kind, name)) => {
@@ -266,9 +275,7 @@ fn process_pp_form(
                 &name,
             )
         }
-        _ => {
-            Ok(vec![body])
-        }
+        _ => Ok(vec![body]),
     }
 }
 
