@@ -134,7 +134,7 @@ fn process_pp_form(
 
         let (full_name, content) = opts.read_new_file(opts.filename(), name_string)?;
         includes.push(IncludeDesc {
-            name: full_name.clone().as_bytes().to_vec(),
+            name: full_name.as_bytes().to_vec(),
             ..desc
         });
 
