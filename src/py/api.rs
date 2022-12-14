@@ -24,7 +24,9 @@ use crate::compiler::cldb::{
     hex_to_modern_sexp, CldbOverrideBespokeCode, CldbRun, CldbRunEnv, CldbSingleBespokeOverride,
 };
 use crate::compiler::clvm::{convert_to_clvm_rs, start_step};
-use crate::compiler::compiler::{extract_program_and_env, path_to_function, rewrite_in_program, DefaultCompilerOpts};
+use crate::compiler::compiler::{
+    extract_program_and_env, path_to_function, rewrite_in_program, DefaultCompilerOpts,
+};
 use crate::compiler::comptypes::{CompileErr, CompilerOpts};
 use crate::compiler::preprocessor::gather_dependencies;
 use crate::compiler::prims;
