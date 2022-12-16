@@ -386,6 +386,7 @@ fn compile_mod_stage_1(
     args: NodePtr,
     macro_lookup: NodePtr,
     run_program: Rc<dyn TRunProgram>,
+    produce_extra_info: bool,
 ) -> Result<CollectionResult, EvalErr> {
     // stage 1: collect up names of globals (functions, constants, macros)
     m! {
@@ -473,7 +474,8 @@ fn compile_mod_stage_1(
                                 allocator,
                                 macro_lookup,
                                 run_program.clone(),
-                                &result_collection
+                                &result_collection,
+                                produce_extra_info
                             )?;
 
                         let compilation_result =
@@ -573,7 +575,7 @@ fn build_macro_lookup_program(
     macros: &[(Vec<u8>, NodePtr)],
     run_program: Rc<dyn TRunProgram>,
 ) -> Result<NodePtr, EvalErr> {
-    return m! {
+    m! {
         com_atom <- allocator.new_atom("com".as_bytes());
         cons_atom <- allocator.new_atom(&[4]);
         opt_atom <- allocator.new_atom("opt".as_bytes());
@@ -603,7 +605,7 @@ fn build_macro_lookup_program(
             &mut macros.iter()
         );
         Ok(result_program)
-    };
+    }
 }
 
 fn add_one_function(
@@ -616,7 +618,7 @@ fn add_one_function(
     lambda_expression: NodePtr,
 ) -> Result<HashMap<Vec<u8>, NodePtr>, EvalErr> {
     let mut compiled_functions = compiled_functions_;
-    return m! {
+    m! {
         com_atom <- allocator.new_atom("com".as_bytes());
         opt_atom <- allocator.new_atom("opt".as_bytes());
 
@@ -655,7 +657,7 @@ fn add_one_function(
         opt_list <- enlist(allocator, &[opt_atom, com_list]);
         let _ = compiled_functions.insert(name.to_vec(), opt_list);
         Ok(compiled_functions)
-    };
+    }
 }
 
 fn compile_functions(
@@ -690,6 +692,7 @@ fn finish_compile_from_collection(
     macro_lookup: NodePtr,
     run_program: Rc<dyn TRunProgram>,
     cr: &CollectionResult,
+    produce_extra_info: bool,
 ) -> Result<NodePtr, EvalErr> {
     let a_atom = allocator.new_atom(&[2])?;
     let cons_atom = allocator.new_atom(&[4])?;
@@ -761,7 +764,14 @@ fn finish_compile_from_collection(
 
         let symbols = build_symbol_dump(allocator, all_constants_lookup, run_program.clone())?;
 
-        let to_run = assemble(allocator, "(_set_symbol_table 1)")?;
+        let to_run = assemble(
+            allocator,
+            if produce_extra_info {
+                "(_set_symbol_table (c (c (q . \"source_file\") (_get_source_file)) 1))"
+            } else {
+                "(_set_symbol_table 1)"
+            },
+        )?;
 
         run_program.run_program(allocator, to_run, symbols, None)?;
 
@@ -782,6 +792,28 @@ pub fn compile_mod(
     _level: usize,
 ) -> Result<NodePtr, EvalErr> {
     // Deal with the "mod" keyword.
-    let cr = compile_mod_stage_1(allocator, args, macro_lookup, run_program.clone())?;
-    finish_compile_from_collection(allocator, macro_lookup, run_program, &cr)
+    let produce_extra_info_prog = assemble(allocator, "(_symbols_extra_info)")?;
+    let produce_extra_info_null = allocator.null();
+    let extra_info_res = run_program.run_program(
+        allocator,
+        produce_extra_info_prog,
+        produce_extra_info_null,
+        None,
+    )?;
+    let produce_extra_info = non_nil(allocator, extra_info_res.1);
+
+    let cr = compile_mod_stage_1(
+        allocator,
+        args,
+        macro_lookup,
+        run_program.clone(),
+        produce_extra_info,
+    )?;
+    finish_compile_from_collection(
+        allocator,
+        macro_lookup,
+        run_program,
+        &cr,
+        produce_extra_info,
+    )
 }

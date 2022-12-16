@@ -51,7 +51,7 @@ use crate::compiler::debug::build_symbol_table_mut;
 use crate::compiler::preprocessor::gather_dependencies;
 use crate::compiler::prims;
 use crate::compiler::sexp;
-use crate::compiler::sexp::parse_sexp;
+use crate::compiler::sexp::{decode_string, parse_sexp};
 use crate::compiler::srcloc::Srcloc;
 use crate::util::collapse;
 
@@ -647,10 +647,10 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
             .set_help("Maximum cost".to_string()),
     );
     parser.add_argument(
-        vec!["-O0".to_string(), "--no-optimize".to_string()],
+        vec!["-O".to_string(), "--optimize".to_string()],
         Argument::new()
             .set_action(TArgOptionAction::StoreTrue)
-            .set_help("don't run optimizer".to_string()),
+            .set_help("run optimizer".to_string()),
     );
     parser.add_argument(
         vec!["--only-exn".to_string()],
@@ -663,6 +663,18 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         Argument::new()
             .set_action(TArgOptionAction::StoreTrue)
             .set_help("Visit dependencies and output a list of used files".to_string()),
+    );
+    parser.add_argument(
+        vec!["-g".to_string(), "--extra-syms".to_string()],
+        Argument::new()
+            .set_action(TArgOptionAction::StoreTrue)
+            .set_help("Produce more diagnostic info in symbols".to_string()),
+    );
+    parser.add_argument(
+        vec!["--symbol-output-file".to_string()],
+        Argument::new()
+            .set_type(Rc::new(PathJoin {}))
+            .set_default(ArgumentValue::ArgString(None, "main.sym".to_string())),
     );
 
     if tool_name == "run" {
@@ -692,9 +704,40 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         _ => keyword_from_atom(),
     };
 
+    // If extra symbol output is desired (not all keys are hashes, but there's
+    // more info).
+    let extra_symbol_info = parsed_args.get("extra_syms").map(|_| true).unwrap_or(false);
+
+    // Get name of included file so we can use it to initialize the compiler's
+    // runner, which contains operators used at compile time in clvm to update
+    // symbols.  This is the only means we have of communicating with the
+    // compilation process from this level.
+    let mut input_file = None;
+    let mut input_program = "()".to_string();
+
+    if let Some(ArgumentValue::ArgString(file, path_or_code)) = parsed_args.get("path_or_code") {
+        input_file = file.clone();
+        input_program = path_or_code.to_string();
+    }
+
+    let reported_input_file = input_file
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| "*command*".to_string());
+
+    let mut search_paths = Vec::new();
+    if let Some(ArgumentValue::ArgArray(v)) = parsed_args.get("include") {
+        let mut bare_paths = Vec::with_capacity(v.len());
+        for p in v {
+            if let ArgumentValue::ArgString(_, s) = p {
+                bare_paths.push(s.to_string());
+            }
+        }
+        search_paths = bare_paths;
+    }
+
     let mut allocator = Allocator::new();
 
-    let mut input_file = None;
     let input_serialized = None;
     let mut input_sexp: Option<NodePtr> = None;
 
@@ -702,18 +745,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     let mut time_read_hex = SystemTime::now();
     let mut time_assemble = SystemTime::now();
 
-    let mut input_program = "()".to_string();
     let mut input_args = "()".to_string();
-
-    let mut search_paths = Vec::new();
-
-    if let Some(ArgumentValue::ArgArray(v)) = parsed_args.get("include") {
-        for p in v {
-            if let ArgumentValue::ArgString(_, s) = p {
-                search_paths.push(s.to_string());
-            }
-        }
-    }
 
     if let (
         Some(ArgumentValue::ArgBool(true)),
@@ -731,7 +763,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
                 }
                 Ok(res) => {
                     for r in res.iter() {
-                        stdout.write_str(r);
+                        stdout.write_str(&decode_string(&r.name));
                         stdout.write_str("\n");
                     }
                 }
@@ -742,17 +774,13 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         return;
     }
 
-    if let Some(ArgumentValue::ArgString(file, path_or_code)) = parsed_args.get("path_or_code") {
-        input_file = file.clone();
-        input_program = path_or_code.to_string();
-    }
-
     if let Some(ArgumentValue::ArgString(file, path_or_code)) = parsed_args.get("env") {
         input_file = file.clone();
         input_args = path_or_code.to_string();
     }
 
-    let special_runner = run_program_for_search_paths(input_file.clone(), &search_paths);
+    let special_runner =
+        run_program_for_search_paths(&reported_input_file, &search_paths, extra_symbol_info);
     let dpr = special_runner.clone();
     let run_program = special_runner;
 
@@ -872,11 +900,8 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     // If strict and no dialect, we'll compile with classic but we'll
     // use the same modern parse here to check for strict variable use.
     if do_check_unused || (choices.strict && choices.dialect.is_none()) {
-        let use_filename = input_file
-            .as_ref()
-            .cloned()
-            .unwrap_or_else(|| "*command*".to_string());
-        let opts = Rc::new(DefaultCompilerOpts::new(&use_filename))
+        let opts =
+            Rc::new(DefaultCompilerOpts::new(&reported_input_file))
             .set_search_paths(&search_paths)
             .set_strict(choices.strict);
         match do_strict_checks(
@@ -900,10 +925,21 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         }
     }
 
+    let symbol_table_output = parsed_args
+        .get("symbol_output_file")
+        .and_then(|s| {
+            if let ArgumentValue::ArgString(_, v) = s {
+                Some(v.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "main.sym".to_string());
+
     // In testing: short circuit for modern compilation.
     if let Some(dialect) = choices.dialect {
         let do_optimize = parsed_args
-            .get("no_optimize")
+            .get("optimize")
             .map(|x| !matches!(x, ArgumentValue::ArgBool(true)))
             .unwrap_or_else(|| true);
         let runner = Rc::new(DefaultProgramRunner::new());
@@ -933,7 +969,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
                 stdout.write_str(&r.to_string());
 
                 build_symbol_table_mut(&mut symbol_table, &r);
-                write_sym_output(&symbol_table, "main.sym").expect("writing symbols");
+                write_sym_output(&symbol_table, &symbol_table_output).expect("writing symbols");
             }
             Err(c) => {
                 stdout.write_str(&format!("{}: {}", c.0, c.1));
@@ -1023,7 +1059,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     let max_cost = parsed_args
         .get("max_cost")
         .map(|x| match x {
-            ArgumentValue::ArgInt(i) => *i as i64 - cost_offset,
+            ArgumentValue::ArgInt(i) => *i - cost_offset,
             _ => 0,
         })
         .unwrap_or_else(|| 0);
@@ -1157,7 +1193,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
 
     let compile_sym_out = dpr.get_compiles();
     if !compile_sym_out.is_empty() {
-        write_sym_output(&compile_sym_out, "main.sym").ok();
+        write_sym_output(&compile_sym_out, &symbol_table_output).ok();
     }
 
     stdout.write_str(&format!("{}\n", output));
