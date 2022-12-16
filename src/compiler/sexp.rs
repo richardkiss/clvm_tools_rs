@@ -707,7 +707,7 @@ fn parse_sexp_step(loc: Srcloc, p: &SExpParseState, this_char: u8) -> SExpParseR
                         emit(list_content[0].clone(), SExpParseState::Empty)
                     } else {
                         emit(
-                            Rc::new(enlist(pl.ext(&loc), &list_content)),
+                            Rc::new(enlist(pl.ext(&loc), list_content)),
                             SExpParseState::Empty,
                         )
                     }

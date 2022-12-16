@@ -770,7 +770,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
             }
         } else {
             stdout.write_str("FAIL: must specify a filename\n");
-            }
+        }
         return;
     }
 
@@ -779,7 +779,8 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         input_args = path_or_code.to_string();
     }
 
-    let special_runner = run_program_for_search_paths(&reported_input_file, &search_paths, extra_symbol_info);
+    let special_runner =
+        run_program_for_search_paths(&reported_input_file, &search_paths, extra_symbol_info);
     let dpr = special_runner.clone();
     let run_program = special_runner;
 

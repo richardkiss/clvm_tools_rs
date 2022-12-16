@@ -384,7 +384,7 @@ fn compile_mod_stage_1(
     args: NodePtr,
     macro_lookup: NodePtr,
     run_program: Rc<dyn TRunProgram>,
-    produce_extra_info: bool
+    produce_extra_info: bool,
 ) -> Result<CollectionResult, EvalErr> {
     // stage 1: collect up names of globals (functions, constants, macros)
     m! {
@@ -690,7 +690,7 @@ fn finish_compile_from_collection(
     macro_lookup: NodePtr,
     run_program: Rc<dyn TRunProgram>,
     cr: &CollectionResult,
-    produce_extra_info: bool
+    produce_extra_info: bool,
 ) -> Result<NodePtr, EvalErr> {
     let a_atom = allocator.new_atom(&[2])?;
     let cons_atom = allocator.new_atom(&[4])?;
@@ -768,7 +768,7 @@ fn finish_compile_from_collection(
                 "(_set_symbol_table (c (c (q . \"source_file\") (_get_source_file)) 1))"
             } else {
                 "(_set_symbol_table 1)"
-            }
+            },
         )?;
 
         run_program.run_program(allocator, to_run, symbols, None)?;
@@ -790,16 +790,28 @@ pub fn compile_mod(
     _level: usize,
 ) -> Result<NodePtr, EvalErr> {
     // Deal with the "mod" keyword.
-   let produce_extra_info_prog = assemble(allocator, "(_symbols_extra_info)")?;
-   let produce_extra_info_null = allocator.null();
-   let extra_info_res = run_program.run_program(
-       allocator,
-       produce_extra_info_prog,
-       produce_extra_info_null,
-       None
-   )?;
-   let produce_extra_info = non_nil(allocator, extra_info_res.1);
+    let produce_extra_info_prog = assemble(allocator, "(_symbols_extra_info)")?;
+    let produce_extra_info_null = allocator.null();
+    let extra_info_res = run_program.run_program(
+        allocator,
+        produce_extra_info_prog,
+        produce_extra_info_null,
+        None,
+    )?;
+    let produce_extra_info = non_nil(allocator, extra_info_res.1);
 
-   let cr = compile_mod_stage_1(allocator, args, macro_lookup, run_program.clone(), produce_extra_info)?;
-   finish_compile_from_collection(allocator, macro_lookup, run_program, &cr, produce_extra_info)
+    let cr = compile_mod_stage_1(
+        allocator,
+        args,
+        macro_lookup,
+        run_program.clone(),
+        produce_extra_info,
+    )?;
+    finish_compile_from_collection(
+        allocator,
+        macro_lookup,
+        run_program,
+        &cr,
+        produce_extra_info,
+    )
 }
