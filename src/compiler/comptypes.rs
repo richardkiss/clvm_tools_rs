@@ -10,6 +10,9 @@ use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::compiler::clvm::sha256tree;
 use crate::compiler::sexp::{decode_string, SExp};
 use crate::compiler::srcloc::Srcloc;
+use crate::compiler::typecheck::TheoryToSExp;
+use crate::compiler::types::ast::{Polytype, TypeVar};
+use crate::util::Number;
 
 #[derive(Clone, Debug)]
 pub struct CompileErr(pub Srcloc, pub String);
@@ -96,6 +99,7 @@ pub struct DefunData {
     pub nl: Srcloc,
     pub args: Rc<SExp>,
     pub body: Rc<BodyForm>,
+    pub ty: Option<Polytype>,
 }
 
 #[derive(Clone, Debug)]
@@ -116,6 +120,47 @@ pub struct DefconstData {
     pub kw: Option<Srcloc>,
     pub nl: Srcloc,
     pub body: Rc<BodyForm>,
+    pub ty: Option<Polytype>,
+}
+
+#[derive(Clone, Debug)]
+pub struct StructMember {
+    pub loc: Srcloc,
+    pub name: Vec<u8>,
+    pub path: Number,
+    pub ty: Polytype,
+}
+
+#[derive(Clone, Debug)]
+pub struct StructDef {
+    pub loc: Srcloc,
+    pub name: Vec<u8>,
+    pub vars: Vec<TypeVar>,
+    pub members: Vec<StructMember>,
+    pub proto: Rc<SExp>,
+    pub ty: Polytype,
+}
+
+#[derive(Clone, Debug)]
+pub enum ChiaType {
+    Abstract(Srcloc, Vec<u8>),
+    Struct(StructDef),
+}
+
+#[derive(Clone, Debug)]
+pub enum TypeAnnoKind {
+    Colon(Polytype),
+    Arrow(Polytype),
+}
+
+#[derive(Clone, Debug)]
+pub struct DeftypeData {
+    pub kw: Srcloc,
+    pub nl: Srcloc,
+    pub loc: Srcloc,
+    pub name: Vec<u8>,
+    pub args: Vec<TypeVar>,
+    pub ty: Option<Polytype>,
 }
 
 #[derive(Clone, Debug)]
@@ -126,6 +171,7 @@ pub enum ConstantKind {
 
 #[derive(Clone, Debug)]
 pub enum HelperForm {
+    Deftype(DeftypeData),
     Defconstant(DefconstData),
     Defmacro(DefmacData),
     Defun(bool, DefunData),
@@ -166,6 +212,7 @@ pub struct CompileForm {
     pub args: Rc<SExp>,
     pub helpers: Vec<HelperForm>,
     pub exp: Rc<BodyForm>,
+    pub ty: Option<Polytype>,
 }
 
 #[derive(Clone, Debug)]
@@ -229,7 +276,7 @@ pub trait CompilerOpts {
 }
 
 /* Frontend uses this to accumulate frontend forms */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModAccum {
     pub loc: Srcloc,
     pub includes: Vec<IncludeDesc>,
@@ -308,6 +355,7 @@ impl CompileForm {
                 .cloned()
                 .collect(),
             exp: self.exp.clone(),
+            ty: self.ty.clone(),
         }
     }
 
@@ -330,6 +378,7 @@ impl CompileForm {
             args: self.args.clone(),
             helpers: new_helpers,
             exp: self.exp.clone(),
+            ty: self.ty.clone(),
         }
     }
 }
@@ -337,6 +386,7 @@ impl CompileForm {
 impl HelperForm {
     pub fn name(&self) -> &Vec<u8> {
         match self {
+            HelperForm::Deftype(deft) => &deft.name,
             HelperForm::Defconstant(defc) => &defc.name,
             HelperForm::Defmacro(mac) => &mac.name,
             HelperForm::Defun(_, defun) => &defun.name,
@@ -345,6 +395,7 @@ impl HelperForm {
 
     pub fn name_loc(&self) -> &Srcloc {
         match self {
+            HelperForm::Deftype(deft) => &deft.nl,
             HelperForm::Defconstant(defc) => &defc.nl,
             HelperForm::Defmacro(mac) => &mac.nl,
             HelperForm::Defun(_, defun) => &defun.nl,
@@ -353,6 +404,7 @@ impl HelperForm {
 
     pub fn loc(&self) -> Srcloc {
         match self {
+            HelperForm::Deftype(deft) => deft.loc.clone(),
             HelperForm::Defconstant(defc) => defc.loc.clone(),
             HelperForm::Defmacro(mac) => mac.loc.clone(),
             HelperForm::Defun(_, defun) => defun.loc.clone(),
@@ -379,6 +431,22 @@ impl HelperForm {
                     ],
                 )),
             },
+            HelperForm::Deftype(deft) => {
+                let mut result_vec = vec![
+                    Rc::new(SExp::atom_from_string(deft.loc.clone(), "deftype")),
+                    Rc::new(SExp::Atom(deft.loc.clone(), deft.name.clone())),
+                ];
+
+                for a in deft.args.iter() {
+                    result_vec.push(Rc::new(a.to_sexp()));
+                }
+
+                if let Some(ty) = &deft.ty {
+                    result_vec.push(Rc::new(ty.to_sexp()));
+                }
+
+                Rc::new(list_to_cons(deft.loc.clone(), &result_vec))
+            }
             HelperForm::Defmacro(mac) => Rc::new(SExp::Cons(
                 mac.loc.clone(),
                 Rc::new(SExp::atom_from_string(mac.loc.clone(), "defmacro")),

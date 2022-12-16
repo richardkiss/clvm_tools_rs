@@ -2,9 +2,8 @@ use std::borrow::Borrow;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use num_bigint::ToBigInt;
-
 use clvm_rs::allocator::Allocator;
+use num_bigint::ToBigInt;
 
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero};
 use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
@@ -36,6 +35,7 @@ pub struct Evaluator {
     helpers: Vec<HelperForm>,
     mash_conditions: bool,
     ignore_exn: bool,
+    disable_calls: bool,
 }
 
 fn select_helper(bindings: &[HelperForm], name: &[u8]) -> Option<HelperForm> {
@@ -208,7 +208,7 @@ fn arg_inputs_primitive(arginputs: Rc<ArgInputs>) -> bool {
     }
 }
 
-fn build_argument_captures(
+pub fn build_argument_captures(
     l: &Srcloc,
     arguments_to_convert: &[Rc<BodyForm>],
     args: Rc<SExp>,
@@ -540,6 +540,31 @@ impl Evaluator {
             helpers,
             mash_conditions: false,
             ignore_exn: false,
+            disable_calls: false,
+        }
+    }
+
+    pub fn disable_calls(&self) -> Self {
+        Evaluator {
+            opts: self.opts.clone(),
+            runner: self.runner.clone(),
+            prims: self.prims.clone(),
+            helpers: self.helpers.clone(),
+            mash_conditions: false,
+            ignore_exn: true,
+            disable_calls: true,
+        }
+    }
+
+    pub fn enable_calls_for_macro(&self) -> Self {
+        Evaluator {
+            opts: self.opts.clone(),
+            runner: self.runner.clone(),
+            prims: self.prims.clone(),
+            helpers: self.helpers.clone(),
+            mash_conditions: false,
+            ignore_exn: true,
+            disable_calls: false,
         }
     }
 
@@ -551,6 +576,7 @@ impl Evaluator {
             helpers: self.helpers.clone(),
             mash_conditions: true,
             ignore_exn: true,
+            disable_calls: false,
         }
     }
 
@@ -838,7 +864,7 @@ impl Evaluator {
         l: Srcloc,
         call_loc: Srcloc,
         call_name: &[u8],
-        _head_expr: Rc<BodyForm>,
+        head_expr: Rc<BodyForm>,
         parts: &[Rc<BodyForm>],
         body: Rc<BodyForm>,
         prog_args: Rc<SExp>,
@@ -861,6 +887,21 @@ impl Evaluator {
             Some(HelperForm::Defun(inline, defun)) => {
                 if !inline && only_inline {
                     return Ok(body);
+                }
+
+                if self.disable_calls {
+                    let mut call_vec = vec![head_expr];
+                    for a in arguments_to_convert.iter() {
+                        call_vec.push(self.shrink_bodyform_visited(
+                            allocator,
+                            visited,
+                            prog_args.clone(),
+                            env,
+                            a.clone(),
+                            only_inline,
+                        )?);
+                    }
+                    return Ok(Rc::new(BodyForm::Call(l, call_vec)));
                 }
 
                 let argument_captures_untranslated =
@@ -1023,6 +1064,8 @@ impl Evaluator {
                     ));
                 }
 
+                // Allow us to punt all calls to functions, which preserved type
+                // signatures for type checking.
                 let head_expr = parts[0].clone();
                 let arguments_to_convert: Vec<Rc<BodyForm>> =
                     parts.iter().skip(1).cloned().collect();

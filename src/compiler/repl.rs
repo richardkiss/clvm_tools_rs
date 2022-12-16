@@ -9,16 +9,14 @@ use clvm_rs::allocator::Allocator;
 
 use crate::classic::clvm_tools::stages::stage_0::TRunProgram;
 use crate::compiler::comptypes::{BodyForm, CompileErr, CompilerOpts};
-use crate::compiler::evaluate::{first_of_alist, second_of_alist, Evaluator};
-use crate::compiler::frontend::frontend;
+use crate::compiler::evaluate::Evaluator;
+use crate::compiler::frontend::{compile_helperform, frontend};
 use crate::compiler::sexp::{parse_sexp, SExp};
 use crate::compiler::srcloc::Srcloc;
 
 pub struct Repl {
     depth: i32,
     input_exp: String,
-
-    toplevel_forms: HashSet<String>,
 
     opts: Rc<dyn CompilerOpts>,
     evaluator: Evaluator,
@@ -75,7 +73,15 @@ impl Repl {
         let loc = Srcloc::start(&opts.filename());
         let mut toplevel_forms = HashSet::new();
 
-        for w in vec!["defun", "defun-inline", "defconstant", "defmacro"].iter() {
+        for w in vec![
+            "defun",
+            "defun-inline",
+            "defconstant",
+            "defmacro",
+            "deftype",
+        ]
+        .iter()
+        {
             toplevel_forms.insert(w.to_string());
         }
 
@@ -84,6 +90,13 @@ impl Repl {
             vec![
                 Rc::new(SExp::atom_from_string(loc.clone(), "if")),
                 Rc::new(SExp::atom_from_string(loc.clone(), "list")),
+                Rc::new(SExp::atom_from_string(loc.clone(), "c*")),
+                Rc::new(SExp::atom_from_string(loc.clone(), "a*")),
+                Rc::new(SExp::atom_from_string(loc.clone(), "coerce")),
+                Rc::new(SExp::atom_from_string(loc.clone(), "explode")),
+                Rc::new(SExp::atom_from_string(loc.clone(), "bless")),
+                Rc::new(SExp::atom_from_string(loc.clone(), "lift")),
+                Rc::new(SExp::atom_from_string(loc.clone(), "unlift")),
             ],
             Rc::new(SExp::Cons(
                 loc.clone(),
@@ -108,7 +121,6 @@ impl Repl {
         Repl {
             depth: 0,
             input_exp: "".to_string(),
-            toplevel_forms,
             evaluator,
             opts,
             loc,
@@ -151,18 +163,14 @@ impl Repl {
                 if parsed_program.is_empty() {
                     return Ok(None);
                 }
-                let fa = first_of_alist(parsed_program[0].clone());
-                let is_helper = fa
-                    .map(|fa| self.toplevel_forms.contains(&fa.to_string()))
-                    .unwrap_or_else(|_| false);
 
-                if is_helper {
-                    let prog0 = parsed_program[0].clone();
-                    let name = second_of_alist(prog0.clone())?;
-                    let built_program = program_with_helper(vec![name], prog0);
-                    let program = frontend(self.opts.clone(), &[built_program])?;
-                    self.evaluator
-                        .add_helper(&program.helpers[program.helpers.len() - 1]);
+                if let Ok(Some(hresult)) =
+                    compile_helperform(self.opts.clone(), parsed_program[0].clone())
+                {
+                    for h in hresult.new_helpers.iter() {
+                        self.evaluator.add_helper(h);
+                    }
+
                     Ok(Some(Rc::new(BodyForm::Quoted(SExp::Nil(self.loc.clone())))))
                 } else {
                     frontend(self.opts.clone(), &parsed_program)

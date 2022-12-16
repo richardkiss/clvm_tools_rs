@@ -655,7 +655,7 @@ fn codegen_(
     compiler: &PrimaryCodegen,
     h: &HelperForm,
 ) -> Result<PrimaryCodegen, CompileErr> {
-    match h {
+    match &h {
         HelperForm::Defun(inline, defun) => {
             if *inline {
                 // Note: this just replaces a dummy function inserted earlier.
@@ -797,6 +797,7 @@ fn generate_let_defun(
             name: name.to_owned(),
             args: Rc::new(inner_function_args),
             body,
+            ty: None,
         },
     )
 }
@@ -963,6 +964,7 @@ fn process_helper_let_bindings(
                         name: defun.name.clone(),
                         args: defun.args.clone(),
                         body: hoisted_body,
+                        ty: defun.ty.clone(),
                     },
                 );
 

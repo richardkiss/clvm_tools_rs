@@ -9,6 +9,7 @@ mod compiler;
 mod evaluate;
 mod repl;
 mod srcloc;
+mod types;
 mod usecheck;
 
 #[test]

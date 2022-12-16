@@ -28,6 +28,8 @@ use crate::compiler::compiler::DefaultCompilerOpts;
 use crate::compiler::comptypes::CompileErr;
 use crate::compiler::comptypes::CompilerOpts;
 use crate::compiler::runtypes::RunFailure;
+use crate::compiler::srcloc::Srcloc;
+use crate::compiler::untype::untype_code;
 
 #[derive(Debug, Clone)]
 pub enum DirectiveDetectionForm {
@@ -154,8 +156,9 @@ pub fn compile_clvm_text(
 ) -> Result<NodePtr, EvalErr> {
     let ir_src = read_ir(text).map_err(|s| EvalErr(allocator.null(), s))?;
     let assembled_sexp = assemble_from_ir(allocator, Rc::new(ir_src))?;
+    let untyped_sexp = untype_code(allocator, Srcloc::start(input_path), assembled_sexp)?;
 
-    let choices = detect_modern(allocator, assembled_sexp);
+    let choices = detect_modern(allocator, untyped_sexp);
     if let Some(dialect) = choices.dialect {
         let runner = Rc::new(DefaultProgramRunner::new());
         let opts = Rc::new(DefaultCompilerOpts::new(input_path))
