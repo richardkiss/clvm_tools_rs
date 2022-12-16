@@ -384,16 +384,28 @@ fn compile_defconstant(
     name: Vec<u8>,
     body: Rc<SExp>,
 ) -> Result<HelperForm, CompileErr> {
-    compile_bodyform(opts, body).map(|bf| {
-        HelperForm::Defconstant(DefconstData {
-            kw: kl,
-            nl,
+    let body_borrowed: &SExp = body.borrow();
+    if let SExp::Cons(_, _, _) = body_borrowed {
+        Ok(HelperForm::Defconstant(DefconstData {
             loc: l,
+            nl,
+            kw: kl,
             kind: ConstantKind::Simple,
             name: name.to_vec(),
-            body: Rc::new(bf),
+            body: Rc::new(BodyForm::Value(body_borrowed.clone())),
+        }))
+    } else {
+        compile_bodyform(opts, body).map(|bf| {
+            HelperForm::Defconstant(DefconstData {
+                loc: l,
+                nl,
+                kw: kl,
+                kind: ConstantKind::Simple,
+                name: name.to_vec(),
+                body: Rc::new(bf),
+            })
         })
-    })
+    }
 }
 
 fn location_span(l_: Srcloc, lst_: Rc<SExp>) -> Srcloc {
