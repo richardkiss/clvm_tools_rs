@@ -12,7 +12,8 @@ use crate::compiler::clvm::run;
 use crate::compiler::codegen::codegen;
 use crate::compiler::compiler::is_at_capture;
 use crate::compiler::comptypes::{
-    Binding, BodyForm, CompileErr, CompileForm, CompilerOpts, HelperForm, LetData, LetFormKind,
+    Binding, BindingPattern, BodyForm, CompileErr, CompileForm, CompilerOpts, HelperForm, LetData,
+    LetFormKind,
 };
 use crate::compiler::frontend::frontend;
 use crate::compiler::runtypes::RunFailure;
@@ -48,13 +49,74 @@ fn select_helper(bindings: &[HelperForm], name: &[u8]) -> Option<HelperForm> {
     None
 }
 
+fn compute_paths_of_destructure(
+    bindings: &mut Vec<(Vec<u8>, Rc<BodyForm>)>,
+    structure: Rc<SExp>,
+    path: Number,
+    mask: Number,
+    bodyform: Rc<BodyForm>,
+) {
+    match structure.atomize() {
+        SExp::Cons(_, a, b) => {
+            let next_mask = mask.clone() * 2_u32.to_bigint().unwrap();
+            let next_right_path = mask + path.clone();
+            compute_paths_of_destructure(bindings, a, path, next_mask.clone(), bodyform.clone());
+            compute_paths_of_destructure(bindings, b, next_right_path, next_mask, bodyform);
+        }
+        SExp::Atom(_, name) => {
+            let mut produce_path = path.clone() | mask;
+            let mut output_form = bodyform.clone();
+
+            while produce_path > bi_one() {
+                if path.clone() & produce_path.clone() != bi_zero() {
+                    // Right path
+                    output_form = Rc::new(make_operator1(
+                        &bodyform.loc(),
+                        "r".to_string(),
+                        output_form,
+                    ));
+                } else {
+                    // Left path
+                    output_form = Rc::new(make_operator1(
+                        &bodyform.loc(),
+                        "f".to_string(),
+                        output_form,
+                    ));
+                }
+
+                produce_path /= 2_u32.to_bigint().unwrap();
+            }
+
+            bindings.push((name, output_form));
+        }
+        _ => {}
+    }
+}
+
 fn update_parallel_bindings(
     bindings: &HashMap<Vec<u8>, Rc<BodyForm>>,
     have_bindings: &[Rc<Binding>],
 ) -> HashMap<Vec<u8>, Rc<BodyForm>> {
     let mut new_bindings = bindings.clone();
     for b in have_bindings.iter() {
-        new_bindings.insert(b.name.clone(), b.body.clone());
+        match &b.pattern {
+            BindingPattern::Name(name) => {
+                new_bindings.insert(name.clone(), b.body.clone());
+            }
+            BindingPattern::Complex(structure) => {
+                let mut computed_getters = Vec::new();
+                compute_paths_of_destructure(
+                    &mut computed_getters,
+                    structure.clone(),
+                    bi_zero(),
+                    bi_one(),
+                    b.body.clone(),
+                );
+                for (name, p) in computed_getters.iter() {
+                    new_bindings.insert(name.clone(), p.clone());
+                }
+            }
+        }
     }
     new_bindings
 }
@@ -959,6 +1021,7 @@ impl Evaluator {
         body: Rc<BodyForm>,
         only_inline: bool,
     ) -> Result<Rc<BodyForm>, CompileErr> {
+        eprintln!("evaluate {}", body.to_sexp());
         match body.borrow() {
             BodyForm::Let(LetFormKind::Parallel, letdata) => {
                 let updated_bindings = update_parallel_bindings(env, &letdata.bindings);
