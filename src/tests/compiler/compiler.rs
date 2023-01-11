@@ -1161,6 +1161,62 @@ fn test_assign_form_0() {
 }
 
 #[test]
+fn test_inline_out_of_bounds_diagnostic() {
+    let prog = indoc! {"
+(mod ()
+  (include *standard-cl-21*)
+  (defun-inline FOO (X Y) (+ X Y))
+  (FOO 3)
+  )"}
+    .to_string();
+    let res = run_string(&prog, &"()".to_string());
+    if let Err(CompileErr(l, e)) = res {
+        assert_eq!(l.line, 4);
+        assert!(e.starts_with("Lookup"));
+    } else {
+        assert!(false);
+    }
+}
+
+#[test]
+fn test_lambda_without_capture_from_function() {
+    let prog = indoc! {"
+(mod (A B)
+  (include *standard-cl-21*)
+  (defun FOO () (lambda (X Y) (+ X Y)))
+  (a (FOO) (list A B))
+  )"}
+    .to_string();
+    let res = run_string(&prog, &"(3 4)".to_string()).unwrap();
+    assert_eq!(res.to_string(), "7");
+}
+
+#[test]
+fn test_lambda_without_capture() {
+    let prog = indoc! {"
+(mod (A B)
+  (include *standard-cl-21*)
+  (a (lambda (X Y) (+ X Y)) (list A B))
+  )"}
+    .to_string();
+    let res = run_string(&prog, &"(3 4)".to_string()).unwrap();
+    assert_eq!(res.to_string(), "7");
+}
+
+#[test]
+fn test_lambda_with_capture_from_function() {
+    let prog = indoc! {"
+(mod (A B)
+  (include *standard-cl-21*)
+  (defun FOO (Z) (lambda ((& Z) X) (- X Z)))
+  (a (FOO A) (list B))
+  )"}
+    .to_string();
+    let res = run_string(&prog, &"(5 19)".to_string()).unwrap();
+    assert_eq!(res.to_string(), "14");
+}
+
+#[test]
 fn test_assign_form_1() {
     let prog = indoc! {"
 (mod (X)
@@ -1324,4 +1380,85 @@ fn test_assign_fun_cplx_2() {
     .to_string();
     let res = run_string(&prog, &"(13)".to_string()).unwrap();
     assert_eq!(res.to_string(), "175");
+}
+
+#[test]
+fn test_lambda_with_capture() {
+    let prog = indoc! {"
+(mod (A B)
+  (include *standard-cl-21*)
+  (a (lambda ((& A) Y) (- Y A)) (list B))
+  )"}
+    .to_string();
+    let res = run_string(&prog, &"(5 19)".to_string()).unwrap();
+    assert_eq!(res.to_string(), "14");
+}
+
+#[test]
+fn test_lambda_in_let() {
+    let prog = indoc! {"
+(mod (A B)
+  (include *standard-cl-21*)
+  (defun FOO (Z)
+    (let ((Q (* 2 Z)))
+      (lambda ((& Q) X) (- X Q))
+      )
+    )
+  (a (FOO A) (list B))
+  )"}
+    .to_string();
+    let res = run_string(&prog, &"(5 19)".to_string()).unwrap();
+    assert_eq!(res.to_string(), "9");
+}
+
+#[test]
+fn test_lambda_in_map() {
+    let prog = indoc! {"
+(mod (add-number L)
+
+  (include *standard-cl-21*)
+
+  (defun map (F L)
+    (if L
+      (c (a F (list (f L))) (map F (r L)))
+      ()
+      )
+    )
+
+  (map
+    (lambda ((& add-number) number) (+ add-number number))
+    L
+    )
+  )
+"}
+    .to_string();
+    let res = run_string(&prog, &"(5 (1 2 3 4))".to_string()).unwrap();
+    assert_eq!(res.to_string(), "(6 7 8 9)");
+}
+
+#[test]
+fn test_lambda_in_map_with_let_surrounding() {
+    let prog = indoc! {"
+(mod (add-number L)
+
+  (include *standard-cl-21*)
+
+  (defun map (F L)
+    (if L
+      (c (a F (list (f L))) (map F (r L)))
+      ()
+      )
+    )
+
+  (map
+    (let ((A (* add-number 2)))
+      (lambda ((& A) number) (+ A number))
+      )
+    L
+    )
+  )
+"}
+    .to_string();
+    let res = run_string(&prog, &"(5 (1 2 3 4))".to_string()).unwrap();
+    assert_eq!(res.to_string(), "(11 12 13 14)");
 }

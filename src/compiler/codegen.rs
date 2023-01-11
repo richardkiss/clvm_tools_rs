@@ -408,8 +408,9 @@ fn compile_call(
                 runner.clone(),
                 opts.clone(),
                 compiler,
-                l,
+                l.clone(),
                 &inline,
+                l,
                 &tl,
             ),
 
@@ -607,7 +608,8 @@ pub fn generate_expr_code(
         }
         BodyForm::Mod(_, program) => {
             // A mod form yields the compiled code.
-            let code = codegen(allocator, runner, opts, program, &mut HashMap::new())?;
+            let without_env = opts.set_start_env(None).set_in_defun(false);
+            let code = codegen(allocator, runner, without_env, program, &mut HashMap::new())?;
             Ok(CompiledCode(
                 program.loc.clone(),
                 Rc::new(SExp::Cons(
@@ -1217,6 +1219,7 @@ fn finalize_env_(
                             c,
                             l.clone(),
                             res,
+                            res.args.loc(),
                             &synthesize_args(res.args.clone()),
                         )
                         .map(|x| x.1),
