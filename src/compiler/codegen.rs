@@ -22,6 +22,7 @@ use crate::compiler::evaluate::Evaluator;
 use crate::compiler::frontend::compile_bodyform;
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
+use crate::compiler::lambda::compose_constant_function_env;
 use crate::compiler::optimize::optimize_expr;
 use crate::compiler::prims::{primapply, primcons, primquote};
 use crate::compiler::runtypes::RunFailure;
@@ -606,7 +607,34 @@ pub fn generate_expr_code(
                 compile_call(allocator, runner, l.clone(), opts, compiler, list.to_vec())
             }
         }
-        BodyForm::Mod(_, program) => {
+        BodyForm::Mod(_, true, program) => {
+            let parent_env = compose_constant_function_env(compiler)?;
+            let env = Rc::new(SExp::Cons(
+                program.args.loc(),
+                parent_env,
+                program.args.clone(),
+            ));
+            let opts_with_env = opts
+                .set_start_env(Some(env))
+                .set_in_defun(true)
+                .set_compiler(compiler.clone());
+            let code = codegen(
+                allocator,
+                runner,
+                opts_with_env,
+                program,
+                &mut HashMap::new(),
+            )?;
+            Ok(CompiledCode(
+                program.loc.clone(),
+                Rc::new(SExp::Cons(
+                    program.loc.clone(),
+                    Rc::new(SExp::Atom(program.loc.clone(), vec![1])),
+                    Rc::new(code),
+                )),
+            ))
+        }
+        BodyForm::Mod(_, false, program) => {
             // A mod form yields the compiled code.
             let without_env = opts.set_start_env(None).set_in_defun(false);
             let code = codegen(allocator, runner, without_env, program, &mut HashMap::new())?;
@@ -1120,6 +1148,7 @@ fn start_codegen(
                     .set_compiler(use_compiler.clone())
                     .set_in_defun(false)
                     .set_stdenv(false)
+                    .set_start_env(None)
                     .set_frontend_opt(false);
 
                 updated_opts

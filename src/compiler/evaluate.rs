@@ -132,7 +132,7 @@ pub fn is_primitive(expr: &BodyForm) -> bool {
     )
 }
 
-fn make_operator1(l: &Srcloc, op: String, arg: Rc<BodyForm>) -> BodyForm {
+pub fn make_operator1(l: &Srcloc, op: String, arg: Rc<BodyForm>) -> BodyForm {
     BodyForm::Call(
         l.clone(),
         vec![
@@ -1168,7 +1168,7 @@ impl Evaluator {
                     )),
                 }
             }
-            BodyForm::Mod(_, program) => {
+            BodyForm::Mod(_, _, program) => {
                 // A mod form yields the compiled code.
                 let code = codegen(
                     allocator,
