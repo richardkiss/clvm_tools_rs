@@ -1,6 +1,6 @@
 use num_bigint::ToBigInt;
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -13,11 +13,9 @@ use crate::classic::clvm_tools::stages::stage_2::optimize::optimize_sexp;
 
 use crate::compiler::clvm::{convert_from_clvm_rs, convert_to_clvm_rs, sha256tree};
 use crate::compiler::codegen::codegen;
-use crate::compiler::comptypes::{
-    CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, PrimaryCodegen,
-};
-use crate::compiler::evaluate::{build_reflex_captures, Evaluator};
+use crate::compiler::comptypes::{CompileErr, CompilerOpts, PrimaryCodegen};
 use crate::compiler::frontend::frontend;
+use crate::compiler::optimize::{fe_opt, finish_optimization, sexp_scale};
 use crate::compiler::prims;
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{parse_sexp, SExp};
@@ -100,85 +98,6 @@ pub fn create_prim_map() -> Rc<HashMap<Vec<u8>, Rc<SExp>>> {
     Rc::new(prim_map)
 }
 
-fn fe_opt(
-    allocator: &mut Allocator,
-    runner: Rc<dyn TRunProgram>,
-    opts: Rc<dyn CompilerOpts>,
-    compileform: CompileForm,
-) -> Result<CompileForm, CompileErr> {
-    let mut compiler_helpers = compileform.helpers.clone();
-    let mut used_names = HashSet::new();
-
-    if !opts.in_defun() {
-        for c in compileform.helpers.iter() {
-            used_names.insert(c.name().clone());
-        }
-
-        for helper in (opts
-            .compiler()
-            .map(|c| c.orig_help)
-            .unwrap_or_else(Vec::new))
-        .iter()
-        {
-            if !used_names.contains(helper.name()) {
-                compiler_helpers.push(helper.clone());
-            }
-        }
-    }
-
-    let evaluator = Evaluator::new(opts.clone(), runner.clone(), compiler_helpers.clone());
-    let mut optimized_helpers: Vec<HelperForm> = Vec::new();
-    for h in compiler_helpers.iter() {
-        match h {
-            HelperForm::Defun(inline, defun) => {
-                let mut env = HashMap::new();
-                build_reflex_captures(&mut env, defun.args.clone());
-                let body_rc = evaluator.shrink_bodyform(
-                    allocator,
-                    defun.args.clone(),
-                    &env,
-                    defun.body.clone(),
-                    true,
-                )?;
-                let new_helper = HelperForm::Defun(
-                    *inline,
-                    DefunData {
-                        loc: defun.loc.clone(),
-                        nl: defun.nl.clone(),
-                        kw: defun.kw.clone(),
-                        name: defun.name.clone(),
-                        args: defun.args.clone(),
-                        body: body_rc.clone(),
-                        ty: defun.ty.clone(),
-                    },
-                );
-                optimized_helpers.push(new_helper);
-            }
-            obj => {
-                optimized_helpers.push(obj.clone());
-            }
-        }
-    }
-    let new_evaluator = Evaluator::new(opts.clone(), runner.clone(), optimized_helpers.clone());
-
-    let shrunk = new_evaluator.shrink_bodyform(
-        allocator,
-        Rc::new(SExp::Nil(compileform.args.loc())),
-        &HashMap::new(),
-        compileform.exp.clone(),
-        true,
-    )?;
-
-    Ok(CompileForm {
-        loc: compileform.loc.clone(),
-        include_forms: compileform.include_forms.clone(),
-        args: compileform.args,
-        helpers: optimized_helpers.clone(),
-        exp: shrunk,
-        ty: None,
-    })
-}
-
 pub fn compile_pre_forms(
     allocator: &mut Allocator,
     runner: Rc<dyn TRunProgram>,
@@ -187,19 +106,34 @@ pub fn compile_pre_forms(
     symbol_table: &mut HashMap<String, String>,
 ) -> Result<SExp, CompileErr> {
     let g = frontend(opts.clone(), pre_forms)?;
-    let compileform = if opts.frontend_opt() {
-        fe_opt(allocator, runner.clone(), opts.clone(), g)?
+    if opts.frontend_opt() {
+        let compileform_inlined = fe_opt(allocator, runner.clone(), opts.clone(), &g, true)?;
+        let generated_inlined = finish_optimization(&codegen(
+            allocator,
+            runner.clone(),
+            opts.clone(),
+            &compileform_inlined,
+            symbol_table,
+        )?);
+        let compileform_noninlined = fe_opt(allocator, runner.clone(), opts.clone(), &g, false)?;
+        let generated_noninlined = finish_optimization(&codegen(
+            allocator,
+            runner,
+            opts,
+            &compileform_noninlined,
+            symbol_table,
+        )?);
+        let inlined_scale = sexp_scale(&generated_inlined);
+        let noninlined_scale = sexp_scale(&generated_noninlined);
+        let generated = if inlined_scale < noninlined_scale {
+            generated_inlined
+        } else {
+            generated_noninlined
+        };
+        Ok(generated)
     } else {
-        CompileForm {
-            loc: g.loc.clone(),
-            include_forms: g.include_forms.clone(),
-            args: g.args.clone(),
-            helpers: g.helpers.clone(), // optimized_helpers.clone(),
-            exp: g.exp,
-            ty: None,
-        }
-    };
-    codegen(allocator, runner, opts.clone(), &compileform, symbol_table)
+        codegen(allocator, runner, opts.clone(), &g, symbol_table)
+    }
 }
 
 pub fn compile_file(

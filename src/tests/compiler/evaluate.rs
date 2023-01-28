@@ -32,7 +32,7 @@ fn shrink_expr_from_string(s: String) -> Result<String, CompileErr> {
                 program.args.clone(),
                 &HashMap::new(),
                 program.exp.clone(),
-                false,
+                Default::default(),
             );
         })
         .map(|result| result.to_sexp().to_string())
@@ -117,7 +117,7 @@ fn compile_with_fe_opt(s: String) -> Result<String, CompileErr> {
 fn test_simple_fe_opt_compile_1() {
     assert_eq!(
         compile_with_fe_opt("(mod () 99)".to_string()).unwrap(),
-        "(2 (1 1 . 99) (4 (1) 1))".to_string()
+        "(2 (1 1 . 99) (4 () 1))".to_string()
     );
 }
 

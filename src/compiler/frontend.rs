@@ -255,7 +255,19 @@ fn make_let_bindings(
                     result.append(&mut rest_bindings);
                     Ok(result)
                 }
-                _ => err.clone(),
+                (_, expr) => {
+                    let compiled_body = compile_bodyform(opts.clone(), Rc::new(expr.clone()))?;
+                    let mut result = Vec::new();
+                    let mut rest_bindings = make_let_bindings(opts, tl.clone())?;
+                    result.push(Rc::new(Binding {
+                        loc: body.loc(),
+                        nl: body.loc(),
+                        pattern: BindingPattern::Complex(Rc::new(x[0].clone())),
+                        body: Rc::new(compiled_body),
+                    }));
+                    result.append(&mut rest_bindings);
+                    Ok(result)
+                }
             })
             .unwrap_or_else(|| err.clone()),
         _ => err,
@@ -537,7 +549,7 @@ fn compile_defconst(
     name: Vec<u8>,
     body: Rc<SExp>,
 ) -> Result<HelperForm, CompileErr> {
-    let bf = compile_bodyform(opts, body)?;
+    let bf = compile_bodyform(opts.clone(), body)?;
     Ok(HelperForm::Defconstant(DefconstData {
         kw: kl,
         nl,
@@ -545,7 +557,8 @@ fn compile_defconst(
         kind: ConstantKind::Complex,
         name: name.to_vec(),
         body: Rc::new(bf),
-        ty: None
+        ty: None,
+        tabled: opts.frontend_opt()
     }))
 }
 
@@ -568,9 +581,10 @@ fn compile_defconstant(
             name: name.to_vec(),
             body: Rc::new(BodyForm::Value(body_borrowed.clone())),
             ty,
+            tabled: opts.frontend_opt(),
         }))
     } else {
-        compile_bodyform(opts, body).map(|bf| {
+        compile_bodyform(opts.clone(), body.clone()).map(|bf| {
             HelperForm::Defconstant(DefconstData {
                 loc: l,
                 nl,
@@ -579,6 +593,7 @@ fn compile_defconstant(
                 name: name.to_vec(),
                 body: Rc::new(bf),
                 ty,
+                tabled: opts.frontend_opt(),
             })
         })
     }
@@ -625,6 +640,7 @@ fn compile_defun(
                 args: data.args,
                 body: Rc::new(bf),
                 ty,
+                synthetic: false,
             },
         )
     })
@@ -1007,6 +1023,7 @@ fn create_constructor(sdef: &StructDef) -> HelperForm {
             args: Rc::new(arguments),
             body: Rc::new(construction),
             ty: Some(funty),
+            synthetic: false
         },
     )
 }
@@ -1071,6 +1088,7 @@ pub fn generate_type_helpers(ty: &ChiaType) -> Vec<HelperForm> {
                                 ],
                             )),
                             ty: Some(funty),
+                            synthetic: false
                         },
                     )
                 })

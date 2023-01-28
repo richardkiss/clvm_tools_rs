@@ -11,7 +11,7 @@ use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{parse_sexp, SExp};
 use crate::compiler::srcloc::Srcloc;
 
-fn compile_string(content: &String) -> Result<String, CompileErr> {
+pub fn compile_string(content: &String) -> Result<String, CompileErr> {
     let mut allocator = Allocator::new();
     let runner = Rc::new(DefaultProgramRunner::new());
     let opts = Rc::new(DefaultCompilerOpts::new(&"*test*".to_string()));
@@ -42,6 +42,7 @@ fn run_string_maybe_opt(
         &mut HashMap::new(),
     )
     .and_then(|x| {
+        eprintln!("run {}", x);
         run(
             &mut allocator,
             runner,
@@ -57,7 +58,15 @@ fn run_string_maybe_opt(
 }
 
 fn run_string(content: &String, args: &String) -> Result<Rc<SExp>, CompileErr> {
-    run_string_maybe_opt(content, args, false)
+    let unopt = run_string_maybe_opt(content, args, false)?;
+    eprintln!("result-uno {}", unopt);
+
+    eprintln!("*** OPTIMIZED ***");
+    let opt = run_string_maybe_opt(content, args, true)?;
+    eprintln!("result-opt {}", opt);
+
+    assert_eq!(unopt, opt);
+    Ok(opt)
 }
 
 /* // Upcoming support for extra optimization (WIP)
@@ -1158,6 +1167,22 @@ fn test_assign_form_0() {
     .to_string();
     let res = run_string(&prog, &"(13)".to_string()).unwrap();
     assert_eq!(res.to_string(), "14");
+}
+
+#[test]
+fn test_cl22_opt_example_1() {
+    let prog = indoc! {"
+    (mod (X)
+     (include *standard-cl-22*)
+     (defconstant Z 1000000)
+     (let
+      ((X1 (+ X Z)))
+      (+ X1 X1 X1 X1 X1 X1)
+     )
+    )"}
+    .to_string();
+    let res = run_string(&prog, &"(3)".to_string()).unwrap();
+    assert_eq!(res.to_string(), "6000018");
 }
 
 #[test]

@@ -13,7 +13,7 @@ use crate::classic::clvm_tools::stages::stage_0::DefaultProgramRunner;
 
 use crate::compiler::compiler::{is_at_capture, DefaultCompilerOpts};
 use crate::compiler::comptypes::{BodyForm, CompileErr, CompileForm, HelperForm};
-use crate::compiler::evaluate::{build_argument_captures, dequote, Evaluator};
+use crate::compiler::evaluate::{build_argument_captures, dequote, Evaluator, ExpandMode};
 use crate::compiler::frontend::frontend;
 use crate::compiler::sexp::{decode_string, SExp};
 use crate::compiler::srcloc::{HasLoc, Srcloc};
@@ -564,7 +564,7 @@ fn handle_macro(
         Rc::new(SExp::Nil(loc.clone())),
         &arg_env,
         form.exp.clone(),
-        true,
+        ExpandMode { functions: false, lets: true },
     )?;
     let parsed_macro_output = frontend(opts.clone(), &[result.to_sexp()])?;
     let exp_result = ev.shrink_bodyform(
@@ -572,7 +572,7 @@ fn handle_macro(
         Rc::new(SExp::Nil(loc.clone())),
         &arg_env,
         parsed_macro_output.exp,
-        false,
+        ExpandMode { functions: true, lets: true },
     )?;
     match dequote(loc.clone(), exp_result) {
         Ok(dequoted) => {
@@ -641,7 +641,7 @@ fn chialisp_to_expr(
                 Rc::new(SExp::Nil(letdata.loc.clone())),
                 &HashMap::new(),
                 body.clone(),
-                false,
+                ExpandMode { functions: true, lets: true },
             )?;
             chialisp_to_expr(program, form_args, beta_reduced)
         }

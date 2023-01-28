@@ -186,3 +186,46 @@ fn test_mod_in_repl() {
         "(q . 10)"
     );
 }
+
+#[test]
+fn test_optimize_let_binding_1_4() {
+    assert_eq!(
+        test_repl_outcome(vec![
+            "(defconstant a 100)",
+            "(defun letbinding_$_265 args args)",
+            "(defun-inline letbinding_$_264 ((a) x) (letbinding_$_265 (c (c a ()) (c x ())) (+ x 1)))",
+            "(letbinding_$_264 (list a) (+ a 1))"
+        ])
+            .unwrap()
+            .unwrap(),
+        "(q ((100) 101) 102)"
+    );
+}
+
+#[test]
+fn test_intermediate_let_final() {
+    assert_eq!(
+        test_repl_outcome(vec![
+            "(defun-inline letbinding_$_265 (((a) x_$_263) y) (+ x_$_263 y))",
+            "(defun-inline letbinding_$_264 ((a) x) (letbinding_$_265 (c (c a ()) (c x ())) (+ x 1)))",
+            "(defun main (a) (letbinding_$_264 (r @) (+ a 1)))",
+            "(main 100)"
+        ])
+            .unwrap()
+            .unwrap(),
+        "(q . 203)"
+    );
+}
+
+#[test]
+fn test_repl_with_at_form() {
+    assert_eq!(
+        test_repl_outcome(vec![
+            "(defun G (A (@ pt (x y))) (list (+ x A) (+ y A)))",
+            "(G 9 (list 3 2))"
+        ])
+        .unwrap()
+        .unwrap(),
+        "(q 12 11)"
+    );
+}
