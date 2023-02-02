@@ -267,40 +267,40 @@ pub fn cldb_handle_trace(
     trace: &[String],
     result: &BTreeMap<String, String>
 ) -> Option<BTreeMap<String, String>> {
-    if let Some(func) = result.get("Function").filter(|f| trace.contains(f)) {
-        if let Some(args) = result.get("Arguments") {
-            if let Ok(parsed_sexp) = parse_sexp(Srcloc::start("*run*"), args.bytes()) {
-                if parsed_sexp.is_empty() {
-                    return None;
-                }
-                let use_args =
-                    // If we can make a list from the args,
-                    //   choose the first arg if first_arg is true
-                    //   otherwise pick everything after the left env
-                    parsed_sexp[0].proper_list().filter(|rest_of_args| {
-                        rest_of_args.len() > 1
-                    }).map(|rest_of_args| {
-                        if trace_first_arg {
-                            Rc::new(rest_of_args[1].clone())
-                        } else {
-                            Rc::new(sexp::enlist(
-                                parsed_sexp[0].loc(),
-                                rest_of_args.iter().skip(1).cloned().map(Rc::new).collect()
-                            ))
-                        }
-                    }).unwrap_or_else(|| parsed_sexp[0].clone());
-
-                let mut new_hash = BTreeMap::new();
-                new_hash.insert(func.clone(), use_args.to_string());
-                return Some(new_hash);
-            }
-        }
-    }
-
-    None
+    result.get("Function").filter(|f| trace.contains(f)).and_then(|func| {
+        result.get("Value").map(|args| (func, args))
+    }).and_then(|(func,args)| {
+        parse_sexp(Srcloc::start("*run*"), args.bytes()).ok().map(|parsed_sexp| {
+            (func,parsed_sexp)
+        })
+    }).filter(|(_func,parsed_sexp)| {
+        !parsed_sexp.is_empty()
+    }).and_then(|(func,parsed_sexp)| {
+        parsed_sexp[0].proper_list().map(|rest_of_args| (func,rest_of_args))
+    }).filter(|(_func,rest_of_args)| {
+        rest_of_args.len() > 1
+    }).map(|(func,rest_of_args)| {
+        // If we can make a list from the args,
+        //   choose the first arg if first_arg is true
+        //   otherwise pick everything after the left env
+        let use_args =
+            if trace_first_arg {
+                Rc::new(rest_of_args[1].clone())
+            } else {
+                Rc::new(sexp::enlist(
+                    rest_of_args[0].loc(),
+                    rest_of_args.iter().skip(1).cloned().map(Rc::new).collect()
+                ))
+            };
+        (func, use_args)
+    }).map(|(func,use_args)| {
+        let mut new_hash = BTreeMap::new();
+        new_hash.insert(func.clone(), use_args.to_string());
+        new_hash
+    })
 }
 
-pub fn cldb(args: &[String]) {
+pub fn cldb(out: &mut dyn std::io::Write, args: &[String]) {
     let tool_name = "cldb".to_string();
     let props = TArgumentParserProps {
         description: "Execute a clvm script.".to_string(),
@@ -373,7 +373,7 @@ pub fn cldb(args: &[String]) {
 
     let parsed_args: HashMap<String, ArgumentValue> = match parser.parse_args(&arg_vec) {
         Err(e) => {
-            println!("FAIL: {e}");
+            write!(out, "FAIL: {e}\n").ok();
             return;
         }
         Ok(pa) => pa,
@@ -480,7 +480,7 @@ pub fn cldb(args: &[String]) {
             parse_error.insert("Error-Location".to_string(), c.0.to_string());
             parse_error.insert("Error".to_string(), c.1);
             output.push(parse_error.clone());
-            println!("{}", yamlette_string(output));
+            write!(out, "{}\n", yamlette_string(output)).ok();
             return;
         }
     };
@@ -500,7 +500,7 @@ pub fn cldb(args: &[String]) {
                     let mut parse_error = BTreeMap::new();
                     parse_error.insert("Error".to_string(), p.to_string());
                     output.push(parse_error.clone());
-                    println!("{}", yamlette_string(output));
+                    write!(out, "{}\n", yamlette_string(output)).ok();
                     return;
                 }
             }
@@ -516,7 +516,7 @@ pub fn cldb(args: &[String]) {
                 parse_error.insert("Error-Location".to_string(), c.0.to_string());
                 parse_error.insert("Error".to_string(), c.1);
                 output.push(parse_error.clone());
-                println!("{}", yamlette_string(output));
+                write!(out, "{}\n", yamlette_string(output)).ok();
                 return;
             }
         },
@@ -537,7 +537,7 @@ pub fn cldb(args: &[String]) {
 
     loop {
         if cldbrun.is_ended() {
-            println!("{}", yamlette_string(output));
+            write!(out, "{}\n", yamlette_string(output)).ok();
             return;
         }
 

@@ -14,15 +14,17 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::str::FromStr;
 
 use clvmr::allocator::Allocator;
 
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero, Stream};
 use crate::classic::clvm_tools::binutils::disassemble;
-use crate::classic::clvm_tools::cmds::launch_tool;
+use crate::classic::clvm_tools::cmds::{cldb, launch_tool};
 use crate::classic::clvm_tools::node_path::NodePath;
 use crate::compiler::clvm::convert_to_clvm_rs;
 use crate::compiler::sexp;
+use crate::compiler::sexp::decode_string;
 use crate::util::{number_from_u8, Number};
 
 const NUM_GEN_ATOMS: usize = 16;
@@ -552,5 +554,83 @@ fn test_modern_sets_source_file_in_symbols() {
     assert_eq!(
         decoded_symbol_file.get("source_file").cloned(),
         Some("resources/tests/steprun/fact.cl".to_string())
+    );
+}
+
+#[test]
+fn test_cldb_with_printing_shows_useful_stuff() {
+    let mut write_vec = Vec::new();
+    let args: Vec<String> = [
+        "cldb",
+        "-i",
+        "resources/tests",
+        "--trace",
+        "print",
+        "--trace-first-arg",
+        "-y",
+        "test.sym",
+        "resources/tests/cldb-print/test.clsp",
+        "()"
+    ].iter().copied().map(|s| String::from_str(s).unwrap()).collect();
+    cldb(&mut write_vec, &args);
+    assert_eq!(decode_string(&write_vec),
+               indoc!{"---
+                       - print: \"\\\"calling_sha256tree\\\"\"
+                       - print: (sha256_returned 50565442356047746631413349885570059132562040184787699607120092457326103992435)
+                      "}
+    );
+}
+
+
+#[test]
+fn test_cldb_with_printing_shows_whole_args() {
+    let mut write_vec = Vec::new();
+    let args: Vec<String> = [
+        "cldb",
+        "-i",
+        "resources/tests",
+        "--trace",
+        "print",
+        "-y",
+        "test.sym",
+        "resources/tests/cldb-print/test.clsp",
+        "()"
+    ].iter().copied().map(|s| String::from_str(s).unwrap()).collect();
+    cldb(&mut write_vec, &args);
+    assert_eq!(decode_string(&write_vec),
+               indoc!{"---
+                       - print: \"(\\\"calling_sha256tree\\\" (2 3 4))\"
+                       - print: ((sha256_returned 50565442356047746631413349885570059132562040184787699607120092457326103992435) 50565442356047746631413349885570059132562040184787699607120092457326103992435)
+                      "}
+    );
+}
+
+#[test]
+fn test_cldb_with_printing_other_fun() {
+    let mut write_vec = Vec::new();
+    let args: Vec<String> = [
+        "cldb",
+        "-i",
+        "resources/tests",
+        "--trace",
+        "increment-list",
+        "--trace",
+        "print",
+        "--trace-first-arg",
+        "-y",
+        "test.sym",
+        "resources/tests/cldb-print/test.clsp",
+        "()"
+    ].iter().copied().map(|s| String::from_str(s).unwrap()).collect();
+    cldb(&mut write_vec, &args);
+    assert_eq!(decode_string(&write_vec),
+               indoc!{"---
+                       - increment-list: (1 2 3)
+                       - increment-list: (2 3)
+                       - increment-list: (3)
+                       - increment-list: ()
+                       - print: \"\\\"calling_sha256tree\\\"\"
+                       - print: (sha256_returned 50565442356047746631413349885570059132562040184787699607120092457326103992435)
+                      "}
     );
 }
