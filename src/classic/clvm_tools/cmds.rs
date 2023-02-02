@@ -257,6 +257,49 @@ fn to_yaml(entries: &[BTreeMap<String, String>]) -> Yaml {
     Yaml::Array(result_array)
 }
 
+// Return a hash for yaml generation containing the name of the matched function
+// and a subset of the arguments.
+//
+// Grab either the first argument (like haskell's trace) or the full argument list
+// (including a passed-through value) based on first_arg.
+pub fn cldb_handle_trace(
+    trace_first_arg: bool,
+    trace: &[String],
+    result: &BTreeMap<String, String>
+) -> Option<BTreeMap<String, String>> {
+    if let Some(func) = result.get("Function").filter(|f| trace.contains(f)) {
+        if let Some(args) = result.get("Arguments") {
+            if let Ok(parsed_sexp) = parse_sexp(Srcloc::start("*run*"), args.bytes()) {
+                if parsed_sexp.is_empty() {
+                    return None;
+                }
+                let use_args =
+                    // If we can make a list from the args,
+                    //   choose the first arg if first_arg is true
+                    //   otherwise pick everything after the left env
+                    parsed_sexp[0].proper_list().filter(|rest_of_args| {
+                        rest_of_args.len() > 1
+                    }).map(|rest_of_args| {
+                        if trace_first_arg {
+                            Rc::new(rest_of_args[1].clone())
+                        } else {
+                            Rc::new(sexp::enlist(
+                                parsed_sexp[0].loc(),
+                                rest_of_args.iter().skip(1).cloned().map(Rc::new).collect()
+                            ))
+                        }
+                    }).unwrap_or_else(|| parsed_sexp[0].clone());
+
+                let mut new_hash = BTreeMap::new();
+                new_hash.insert(func.clone(), use_args.to_string());
+                return Some(new_hash);
+            }
+        }
+    }
+
+    None
+}
+
 pub fn cldb(args: &[String]) {
     let tool_name = "cldb".to_string();
     let props = TArgumentParserProps {
@@ -285,6 +328,18 @@ pub fn cldb(args: &[String]) {
         Argument::new()
             .set_action(TArgOptionAction::StoreTrue)
             .set_help("parse input program and arguments from hex".to_string()),
+    );
+    parser.add_argument(
+        vec!["--trace-first-arg".to_string()],
+        Argument::new()
+            .set_action(TArgOptionAction::StoreTrue)
+            .set_help("show first argument only of traced functions".to_string())
+    );
+    parser.add_argument(
+        vec!["-t".to_string(), "--trace".to_string()],
+        Argument::new()
+            .set_action(TArgOptionAction::Append)
+            .set_default(ArgumentValue::ArgArray(vec![]))
     );
     parser.add_argument(
         vec!["-y".to_string(), "--symbol-table".to_string()],
@@ -340,6 +395,22 @@ pub fn cldb(args: &[String]) {
     if let Some(ArgumentValue::ArgString(_, s)) = parsed_args.get("env") {
         parsed_args_result = s.to_string();
     }
+
+    let trace =
+        if let Some(ArgumentValue::ArgArray(arr)) = parsed_args.get("trace") {
+            arr.iter().filter_map(|s| {
+                if let ArgumentValue::ArgString(_, s) = s {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            }).collect()
+        } else {
+            vec![]
+        };
+
+    let trace_first_arg =
+        matches!(parsed_args.get("trace_first_arg"), Some(ArgumentValue::ArgBool(true)));
 
     let mut allocator = Allocator::new();
 
@@ -471,7 +542,15 @@ pub fn cldb(args: &[String]) {
         }
 
         if let Some(result) = cldbrun.step(&mut allocator) {
-            output.push(result);
+            if trace.is_empty() {
+                output.push(result);
+            } else if let Some(result) = cldb_handle_trace(
+                trace_first_arg,
+                &trace,
+                &result
+            ) {
+                output.push(result);
+            }
         }
     }
 }
