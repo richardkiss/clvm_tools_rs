@@ -570,17 +570,21 @@ fn test_cldb_with_printing_shows_useful_stuff() {
         "-y",
         "test.sym",
         "resources/tests/cldb-print/test.clsp",
-        "()"
-    ].iter().copied().map(|s| String::from_str(s).unwrap()).collect();
+        "()",
+    ]
+    .iter()
+    .copied()
+    .map(|s| String::from_str(s).unwrap())
+    .collect();
     cldb(&mut write_vec, &args);
-    assert_eq!(decode_string(&write_vec),
-               indoc!{"---
+    assert_eq!(
+        decode_string(&write_vec),
+        indoc! {"---
                        - print: \"\\\"calling_sha256tree\\\"\"
                        - print: (sha256_returned 50565442356047746631413349885570059132562040184787699607120092457326103992435)
                       "}
     );
 }
-
 
 #[test]
 fn test_cldb_with_printing_shows_whole_args() {
@@ -594,11 +598,16 @@ fn test_cldb_with_printing_shows_whole_args() {
         "-y",
         "test.sym",
         "resources/tests/cldb-print/test.clsp",
-        "()"
-    ].iter().copied().map(|s| String::from_str(s).unwrap()).collect();
+        "()",
+    ]
+    .iter()
+    .copied()
+    .map(|s| String::from_str(s).unwrap())
+    .collect();
     cldb(&mut write_vec, &args);
-    assert_eq!(decode_string(&write_vec),
-               indoc!{"---
+    assert_eq!(
+        decode_string(&write_vec),
+        indoc! {"---
                        - print: \"(\\\"calling_sha256tree\\\" (2 3 4))\"
                        - print: ((sha256_returned 50565442356047746631413349885570059132562040184787699607120092457326103992435) 50565442356047746631413349885570059132562040184787699607120092457326103992435)
                       "}
@@ -620,11 +629,16 @@ fn test_cldb_with_printing_other_fun() {
         "-y",
         "test.sym",
         "resources/tests/cldb-print/test.clsp",
-        "()"
-    ].iter().copied().map(|s| String::from_str(s).unwrap()).collect();
+        "()",
+    ]
+    .iter()
+    .copied()
+    .map(|s| String::from_str(s).unwrap())
+    .collect();
     cldb(&mut write_vec, &args);
-    assert_eq!(decode_string(&write_vec),
-               indoc!{"---
+    assert_eq!(
+        decode_string(&write_vec),
+        indoc! {"---
                        - increment-list: (1 2 3)
                        - increment-list: (2 3)
                        - increment-list: (3)
