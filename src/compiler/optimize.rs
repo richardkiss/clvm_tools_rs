@@ -18,12 +18,14 @@ use crate::compiler::codegen::{codegen, get_callable};
 use crate::compiler::comptypes::{
     BodyForm, Callable, CompileErr, CompileForm, CompilerOpts, HelperForm, PrimaryCodegen,
 };
-use crate::compiler::evaluate::{build_reflex_captures, Evaluator, ExpandMode};
+use crate::compiler::evaluate::{build_reflex_captures, Evaluator, EVAL_STACK_LIMIT, ExpandMode};
 #[cfg(test)]
 use crate::compiler::sexp::parse_sexp;
 use crate::compiler::sexp::SExp;
 use crate::compiler::srcloc::Srcloc;
 use crate::util::u8_from_number;
+
+const CONST_FOLD_LIMIT: usize = 10000000;
 
 fn is_at_form(head: Rc<BodyForm>) -> bool {
     match head.borrow() {
@@ -128,6 +130,7 @@ pub fn optimize_expr(
                                 opts.prim_map(),
                                 code.to_sexp(),
                                 Rc::new(SExp::Nil(l)),
+                                Some(CONST_FOLD_LIMIT),
                             )
                             .map(|x| {
                                 let x_borrow: &SExp = x.borrow();
@@ -255,6 +258,7 @@ fn take_smaller_form(
             functions: false,
             lets: with_inlines,
         },
+        Some(EVAL_STACK_LIMIT)
     )?;
 
     let normal_form = CompileForm {

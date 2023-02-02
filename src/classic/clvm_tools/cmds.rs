@@ -77,9 +77,9 @@ impl ArgumentValueConv for PathOrCodeConv {
 // }
 
 pub trait TConversion {
-    fn invoke<'a>(
+    fn invoke(
         &self,
-        allocator: &'a mut Allocator,
+        allocator: &mut Allocator,
         text: &str,
     ) -> Result<Tuple<NodePtr, String>, String>;
 }
@@ -115,7 +115,7 @@ pub fn call_tool(
     let args: HashMap<String, ArgumentValue> = match args_res {
         Ok(a) => a,
         Err(e) => {
-            println!("{}", e);
+            println!("{e}");
             return;
         }
     };
@@ -145,7 +145,7 @@ pub fn call_tool(
                         if args.contains_key(&"script_hash".to_string()) {
                             println!("{}", sha256tree(allocator, sexp).hex());
                         } else if !text.is_empty() {
-                            println!("{}", text);
+                            println!("{text}");
                         }
                     }
                     Err(e) => {
@@ -163,9 +163,9 @@ pub fn call_tool(
 pub struct OpcConversion {}
 
 impl TConversion for OpcConversion {
-    fn invoke<'a>(
+    fn invoke(
         &self,
-        allocator: &'a mut Allocator,
+        allocator: &mut Allocator,
         hex_text: &str,
     ) -> Result<Tuple<NodePtr, String>, String> {
         read_ir(hex_text)
@@ -177,9 +177,9 @@ impl TConversion for OpcConversion {
 pub struct OpdConversion {}
 
 impl TConversion for OpdConversion {
-    fn invoke<'a>(
+    fn invoke(
         &self,
-        allocator: &'a mut Allocator,
+        allocator: &mut Allocator,
         hex_text: &str,
     ) -> Result<Tuple<NodePtr, String>, String> {
         let mut stream = Stream::new(Some(Bytes::new(Some(BytesFromType::Hex(
@@ -228,7 +228,7 @@ impl ArgumentValueConv for StageImport {
         } else if arg == "2" {
             return Ok(ArgumentValue::ArgInt(2));
         }
-        Err(format!("Unknown stage: {}", arg))
+        Err(format!("Unknown stage: {arg}"))
     }
 }
 
@@ -264,13 +264,56 @@ fn to_yaml(entries: &[BTreeMap<String, String>]) -> Yaml {
     Yaml::Array(result_array)
 }
 
-pub fn cldb(args: &[String]) {
-    env_logger::init();
+// Return a hash for yaml generation containing the name of the matched function
+// and a subset of the arguments.
+//
+// Grab either the first argument (like haskell's trace) or the full argument list
+// (including a passed-through value) based on first_arg.
+pub fn cldb_handle_trace(
+    trace_first_arg: bool,
+    trace: &[String],
+    result: &BTreeMap<String, String>
+) -> Option<BTreeMap<String, String>> {
+    result.get("Function").filter(|f| trace.contains(f)).and_then(|func| {
+        result.get("Value").map(|args| (func, args))
+    }).and_then(|(func,args)| {
+        parse_sexp(Srcloc::start("*run*"), args.bytes()).ok().map(|parsed_sexp| {
+            (func,parsed_sexp)
+        })
+    }).filter(|(_func,parsed_sexp)| {
+        !parsed_sexp.is_empty()
+    }).and_then(|(func,parsed_sexp)| {
+        parsed_sexp[0].proper_list().map(|rest_of_args| (func,rest_of_args))
+    }).filter(|(_func,rest_of_args)| {
+        rest_of_args.len() > 1
+    }).map(|(func,rest_of_args)| {
+        // If we can make a list from the args,
+        //   choose the first arg if first_arg is true
+        //   otherwise pick everything after the left env
+        let arg_list: Vec<Rc<sexp::SExp>> =
+            rest_of_args.iter().skip(1).cloned().map(Rc::new).collect();
+        let use_args =
+            if trace_first_arg {
+                Rc::new(rest_of_args[1].clone())
+            } else {
+                Rc::new(sexp::enlist(
+                    rest_of_args[0].loc(),
+                    &arg_list
+                ))
+            };
+        (func, use_args)
+    }).map(|(func,use_args)| {
+        let mut new_hash = BTreeMap::new();
+        new_hash.insert(func.clone(), use_args.to_string());
+        new_hash
+    })
+}
 
+pub fn cldb(out: &mut dyn std::io::Write, args: &[String]) {
     let tool_name = "cldb".to_string();
     let props = TArgumentParserProps {
         description: "Execute a clvm script.".to_string(),
-        prog: format!("clvm_tools {}", tool_name),
+        prog: format!("clvm_tools {tool_name}"),
     };
 
     let mut search_paths = Vec::new();
@@ -294,6 +337,18 @@ pub fn cldb(args: &[String]) {
         Argument::new()
             .set_action(TArgOptionAction::StoreTrue)
             .set_help("parse input program and arguments from hex".to_string()),
+    );
+    parser.add_argument(
+        vec!["--trace-first-arg".to_string()],
+        Argument::new()
+            .set_action(TArgOptionAction::StoreTrue)
+            .set_help("show first argument only of traced functions".to_string())
+    );
+    parser.add_argument(
+        vec!["-t".to_string(), "--trace".to_string()],
+        Argument::new()
+            .set_action(TArgOptionAction::Append)
+            .set_default(ArgumentValue::ArgArray(vec![]))
     );
     parser.add_argument(
         vec!["-y".to_string(), "--symbol-table".to_string()],
@@ -327,7 +382,7 @@ pub fn cldb(args: &[String]) {
 
     let parsed_args: HashMap<String, ArgumentValue> = match parser.parse_args(&arg_vec) {
         Err(e) => {
-            println!("FAIL: {}", e);
+            write!(out, "FAIL: {e}\n").ok();
             return;
         }
         Ok(pa) => pa,
@@ -349,6 +404,22 @@ pub fn cldb(args: &[String]) {
     if let Some(ArgumentValue::ArgString(_, s)) = parsed_args.get("env") {
         parsed_args_result = s.to_string();
     }
+
+    let trace =
+        if let Some(ArgumentValue::ArgArray(arr)) = parsed_args.get("trace") {
+            arr.iter().filter_map(|s| {
+                if let ArgumentValue::ArgString(_, s) = s {
+                    Some(s.clone())
+                } else {
+                    None
+                }
+            }).collect()
+        } else {
+            vec![]
+        };
+
+    let trace_first_arg =
+        matches!(parsed_args.get("trace_first_arg"), Some(ArgumentValue::ArgBool(true)));
 
     let mut allocator = Allocator::new();
 
@@ -390,7 +461,7 @@ pub fn cldb(args: &[String]) {
         let mut emitter = YamlEmitter::new(&mut result);
         match emitter.dump(&to_yaml(&to_print)) {
             Ok(_) => result,
-            Err(e) => format!("error producing yaml: {:?}", e),
+            Err(e) => format!("error producing yaml: {e:?}"),
         }
     };
 
@@ -418,7 +489,7 @@ pub fn cldb(args: &[String]) {
             parse_error.insert("Error-Location".to_string(), c.0.to_string());
             parse_error.insert("Error".to_string(), c.1);
             output.push(parse_error.clone());
-            println!("{}", yamlette_string(output));
+            write!(out, "{}\n", yamlette_string(output)).ok();
             return;
         }
     };
@@ -438,7 +509,7 @@ pub fn cldb(args: &[String]) {
                     let mut parse_error = BTreeMap::new();
                     parse_error.insert("Error".to_string(), p.to_string());
                     output.push(parse_error.clone());
-                    println!("{}", yamlette_string(output));
+                    write!(out, "{}\n", yamlette_string(output)).ok();
                     return;
                 }
             }
@@ -454,7 +525,7 @@ pub fn cldb(args: &[String]) {
                 parse_error.insert("Error-Location".to_string(), c.0.to_string());
                 parse_error.insert("Error".to_string(), c.1);
                 output.push(parse_error.clone());
-                println!("{}", yamlette_string(output));
+                write!(out, "{}\n", yamlette_string(output)).ok();
                 return;
             }
         },
@@ -475,12 +546,20 @@ pub fn cldb(args: &[String]) {
 
     loop {
         if cldbrun.is_ended() {
-            println!("{}", yamlette_string(output));
+            write!(out, "{}\n", yamlette_string(output)).ok();
             return;
         }
 
         if let Some(result) = cldbrun.step(&mut allocator) {
-            output.push(result);
+            if trace.is_empty() {
+                output.push(result);
+            } else if let Some(result) = cldb_handle_trace(
+                trace_first_arg,
+                &trace,
+                &result
+            ) {
+                output.push(result);
+            }
         }
     }
 }
@@ -555,7 +634,7 @@ fn fix_log(
 pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, default_stage: u32) {
     let props = TArgumentParserProps {
         description: "Execute a clvm script.".to_string(),
-        prog: format!("clvm_tools {}", tool_name),
+        prog: format!("clvm_tools {tool_name}"),
     };
 
     let mut parser = ArgumentParser::new(Some(props));
@@ -705,7 +784,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     let arg_vec = args[1..].to_vec();
     let parsed_args: HashMap<String, ArgumentValue> = match parser.parse_args(&arg_vec) {
         Err(e) => {
-            stdout.write_str(&format!("FAIL: {}\n", e));
+            stdout.write_str(&format!("FAIL: {e}\n"));
             return;
         }
         Ok(pa) => pa,
@@ -843,7 +922,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
                         src_sexp = s;
                     }
                     Err(e) => {
-                        stdout.write_str(&format!("FAIL: {}\n", e));
+                        stdout.write_str(&format!("FAIL: {e}\n"));
                         return;
                     }
                 }
@@ -914,7 +993,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         .unwrap_or_else(Default::default);
     let mut stderr_output = |s: String| {
         if choices.dialect.is_some() {
-            eprintln!("{}", s);
+            eprintln!("{s}");
         } else {
             stdout.write_str(&s);
         }
@@ -1175,7 +1254,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
                 if cost > 0 {
                     cost += cost_offset;
                 }
-                stdout.write_str(&format!("cost = {}\n", cost));
+                stdout.write_str(&format!("cost = {cost}\n"));
             };
 
             if let Some(ArgumentValue::ArgBool(true)) = parsed_args.get("time") {
@@ -1238,7 +1317,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
         write_sym_output(&compile_sym_out, &symbol_table_output).ok();
     }
 
-    stdout.write_str(&format!("{}\n", output));
+    stdout.write_str(&format!("{output}\n"));
 
     // Third part of our scheme: now that we have results from the forward pass
     // and the pass doing the post callbacks, we can integrate them in the main
