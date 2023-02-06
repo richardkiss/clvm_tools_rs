@@ -1127,12 +1127,12 @@ fn start_codegen(
                         opts.prim_map(),
                         Rc::new(code),
                         Rc::new(SExp::Nil(defc.loc.clone())),
-                        Some(CONST_EVAL_LIMIT)
+                        Some(CONST_EVAL_LIMIT),
                     )
                     .map_err(|r| {
                         CompileErr(
                             defc.loc.clone(),
-                            format!("Error evaluating constant: {}", r),
+                            format!("Error evaluating constant: {r}"),
                         )
                     })
                     .and_then(|res| {

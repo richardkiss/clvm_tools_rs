@@ -285,6 +285,531 @@ fn test_forms_of_destructuring_allowed_by_classic_1() {
     );
 }
 
+fn run_dependencies(filename: &str) -> HashSet<String> {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "-M".to_string(),
+        filename.to_owned(),
+    ])
+    .trim()
+    .to_string();
+
+    eprintln!("run_dependencies:\n{}", result_text);
+
+    let mut dep_set = HashSet::new();
+    for l in result_text.lines() {
+        if let Some(suffix_start) = l.find("resources/tests") {
+            let copied_suffix: Vec<u8> = l.as_bytes().iter().skip(suffix_start).copied().collect();
+            dep_set.insert(decode_string(&copied_suffix));
+        } else {
+            panic!("file {} isn't expected", l);
+        }
+    }
+
+    dep_set
+}
+
+#[test]
+fn test_get_dependencies_1() {
+    let dep_set = run_dependencies("resources/tests/singleton_top_layer.clvm");
+
+    eprintln!("dep_set {dep_set:?}");
+
+    let mut expect_set = HashSet::new();
+    expect_set.insert("resources/tests/condition_codes.clvm".to_owned());
+    expect_set.insert("resources/tests/curry-and-treehash.clinc".to_owned());
+    expect_set.insert("resources/tests/singleton_truths.clib".to_owned());
+
+    assert_eq!(dep_set, expect_set);
+}
+
+#[test]
+fn test_treehash_constant_embedded_classic() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        indoc! {"
+            (mod ()
+              (include sha256tree.clib)
+              (defconst H (+ G (sha256tree (q 2 3 4))))
+              (defconst G 1)
+              H
+              )
+        "}
+        .to_string(),
+    ])
+    .trim()
+    .to_string();
+    assert_eq!(
+        result_text,
+        "(q . 0x6fcb06b1fe29d132bb37f3a21b86d7cf03d636bf6230aa206486bef5e68f9874)"
+    );
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0x6fcb06b1fe29d132bb37f3a21b86d7cf03d636bf6230aa206486bef5e68f9874"
+    );
+}
+
+#[test]
+fn test_treehash_constant_embedded_fancy_order() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        indoc! {"
+            (mod ()
+              (include sha256tree.clib)
+              (defconst C 18)
+              (defconst H (+ C G (sha256tree (q 2 3 4))))
+              (defconst G (+ B A))
+              (defconst A 9)
+              (defconst B (* A A))
+              H
+              )
+        "}
+        .to_string(),
+    ])
+    .trim()
+    .to_string();
+    assert_eq!(
+        result_text,
+        "(q . 0x6fcb06b1fe29d132bb37f3a21b86d7cf03d636bf6230aa206486bef5e68f98df)"
+    );
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0x6fcb06b1fe29d132bb37f3a21b86d7cf03d636bf6230aa206486bef5e68f98df"
+    );
+}
+
+#[test]
+fn test_treehash_constant_embedded_fancy_order_from_fun() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        indoc! {"
+            (mod ()
+              (include sha256tree.clib)
+              (defconst C 18)
+              (defconst H (+ C G (sha256tree (q 2 3 4))))
+              (defconst G (+ B A))
+              (defconst A 9)
+              (defconst B (* A A))
+              (defun F (X) (+ X H))
+              (F 1)
+              )
+        "}
+        .to_string(),
+    ])
+    .trim()
+    .to_string();
+    assert_eq!(
+        result_text,
+        "(q . 0x6fcb06b1fe29d132bb37f3a21b86d7cf03d636bf6230aa206486bef5e68f98e0)"
+    );
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0x6fcb06b1fe29d132bb37f3a21b86d7cf03d636bf6230aa206486bef5e68f98e0"
+    );
+}
+
+#[test]
+fn test_treehash_constant_embedded_classic_loop() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        indoc! {"
+            (mod ()
+              (include sha256tree.clib)
+              (defconst H (+ G (sha256tree (q 2 3 4))))
+              (defconst G (logand H 1))
+              H
+              )
+        "}
+        .to_string(),
+    ])
+    .trim()
+    .to_string();
+    assert!(result_text.starts_with("FAIL"));
+    assert!(result_text.contains("got stuck untangling defconst dependencies"));
+}
+
+#[test]
+fn test_treehash_constant_embedded_modern() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        indoc! {"
+            (mod ()
+              (include *standard-cl-21*)
+              (include sha256tree.clib)
+              (defconst H (+ G (sha256tree (q 2 3 4))))
+              (defconst G 1)
+              H
+              )
+        "}
+        .to_string(),
+    ])
+    .trim()
+    .to_string();
+    assert_eq!(
+        result_text,
+        "(2 (1 1 . 50565442356047746631413349885570059132562040184787699607120092457326103992436) (4 (1 2 (1 2 (3 (7 5) (1 2 (1 11 (1 . 2) (2 2 (4 2 (4 (5 5) ()))) (2 2 (4 2 (4 (6 5) ())))) 1) (1 2 (1 11 (1 . 1) 5) 1)) 1) 1) 1))"
+    );
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0x6fcb06b1fe29d132bb37f3a21b86d7cf03d636bf6230aa206486bef5e68f9874"
+    );
+}
+
+#[test]
+fn test_treehash_constant_embedded_modern_fun() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        indoc! {"
+            (mod ()
+              (include *standard-cl-21*)
+              (include sha256tree.clib)
+              (defconst H (+ G (sha256tree (q 2 3 4))))
+              (defconst G 1)
+              (defun F (X) (+ X H))
+              (F 1)
+              )
+        "}
+        .to_string(),
+    ])
+    .trim()
+    .to_string();
+    assert_eq!(
+        result_text,
+        "(2 (1 2 6 (4 2 (4 (1 . 1) ()))) (4 (1 (2 (1 2 (3 (7 5) (1 2 (1 11 (1 . 2) (2 4 (4 2 (4 (5 5) ()))) (2 4 (4 2 (4 (6 5) ())))) 1) (1 2 (1 11 (1 . 1) 5) 1)) 1) 1) 2 (1 16 5 (1 . 50565442356047746631413349885570059132562040184787699607120092457326103992436)) 1) 1))".to_string()
+    );
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0x6fcb06b1fe29d132bb37f3a21b86d7cf03d636bf6230aa206486bef5e68f9875"
+    );
+}
+
+#[test]
+fn test_treehash_constant_embedded_modern_loop() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        indoc! {"
+            (mod ()
+              (include *standard-cl-21*)
+              (include sha256tree.clib)
+              (defconst H (+ G (sha256tree (q 2 3 4))))
+              (defconst G (logand H 1))
+              H
+              )
+        "}
+        .to_string(),
+    ])
+    .trim()
+    .to_string();
+    eprintln!("{result_text}");
+    assert!(result_text.starts_with("*command*"));
+    assert!(result_text.contains("stack limit exceeded"));
+}
+
+#[test]
+fn test_compile_file_1() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (compile-file foo secret_number.cl) foo)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(+ 2 (q . 19))");
+    fs::remove_file("*command*_foo.sym")
+        .expect("file should have been dropped from compile process");
+}
+
+#[test]
+fn test_embed_file_2() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (embed-file testhex hex hex-embed-01.hex) testhex)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(65 66 67)");
+}
+
+#[test]
+fn test_compile_file_3() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (compile-file foo secret_number.cl) foo)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(a (q 16 (f (r 1)) (q . 19)) (c (q) 1))");
+}
+
+#[test]
+fn test_embed_file_4() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (embed-file testhex hex hex-embed-01.hex) testhex)"
+            .to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(65 66 67)");
+}
+
+#[test]
+fn test_embed_file_5() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (embed-file testsexp sexp embed.sexp) testsexp)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(lsh 24 25)");
+}
+
+#[test]
+fn test_embed_file_6() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (embed-file testsexp sexp embed.sexp) testsexp)"
+            .to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "(lsh 24 25)");
+}
+
+#[test]
+fn test_embed_file_7() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (embed-file hello bin hello.bin) hello)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "\"hello\"");
+}
+
+#[test]
+fn test_embed_file_8() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (embed-file hello bin hello.bin) hello)".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(run_result, "\"hello\"");
+}
+
+#[test]
+fn test_embed_file_9() {
+    let program = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "(mod () (include *standard-cl-21*) (embed-file hello bin hello.bin) (sha256 (sha256 hello)))".to_string(),
+    ])
+        .trim()
+        .to_string();
+    let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        run_result,
+        "0x9595c9df90075148eb06860365df33584b75bff782a510c6cd4883a419833d50"
+    );
+}
+
+#[test]
+fn test_get_dependencies_2() {
+    let dep_set = run_dependencies("resources/tests/test_treehash_constant.cl");
+
+    let mut expect_set = HashSet::new();
+    expect_set.insert("resources/tests/sha256tree.clib".to_owned());
+    expect_set.insert("resources/tests/secret_number.cl".to_owned());
+    expect_set.insert("resources/tests/test_sub_include.cl".to_owned());
+    assert_eq!(dep_set, expect_set);
+}
+
+#[test]
+fn test_treehash_constant() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/test_treehash_constant.cl".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0x34380f2097b86970818f8b026b68135d665babc5fda5afe577f86d51105e08b5"
+    );
+    fs::remove_file("test_treehash_constant.cl_secret-number.sym")
+        .expect("should have been dropped");
+}
+
+#[test]
+fn test_treehash_constant_2() {
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/test_treehash_constant_2.cl".to_string(),
+    ])
+    .trim()
+    .to_string();
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(
+        result_hash,
+        "0xe2954b5f459d1cffff293498f8263c961890a06fe28d6be1a0f08412164ced80"
+    );
+    fs::remove_file("test_treehash_constant_2.cl_secret-number.sym")
+        .expect("should have been dropped");
+}
+
+fn compute_hash_of_program(disk_file: &str) -> String {
+    let mut allocator = Allocator::new();
+    let want_program_repr = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        disk_file.to_string(),
+    ])
+    .trim()
+    .to_string();
+
+    let hexed = OpcConversion {}
+        .invoke(&mut allocator, &want_program_repr)
+        .unwrap();
+    let sexp = OpdConversion {}
+        .invoke(&mut allocator, &hexed.rest())
+        .unwrap();
+    format!("0x{}", sha256tree(&mut allocator, *sexp.first()).hex())
+}
+
+#[test]
+fn test_treehash_constant_21() {
+    let want_inner_program_hash =
+        "0xfb5255887665727c721852a42493d43710a66a331f7ba50e0248459e23d0a0b2";
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/test_treehash_constant_21.cl".to_string(),
+    ])
+    .trim()
+    .to_string();
+
+    assert_eq!(
+        compute_hash_of_program("resources/tests/secret_number.cl"),
+        want_inner_program_hash
+    );
+
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+
+    assert_eq!(result_hash, want_inner_program_hash);
+}
+
+#[test]
+fn test_treehash_constant_21_2() {
+    let expected_hash = "0xd9e5da863d7f61605f4430d4f59d2e7b65e87bf8aa664a28a73c73e1523a7a17";
+
+    let result_text = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        "resources/tests/test_treehash_constant_21_2.cl".to_string(),
+    ])
+    .trim()
+    .to_string();
+
+    assert_eq!(
+        compute_hash_of_program("resources/tests/secret_number2.cl"),
+        expected_hash
+    );
+
+    let result_hash = do_basic_brun(&vec!["brun".to_string(), result_text, "()".to_string()])
+        .trim()
+        .to_string();
+
+    assert_eq!(result_hash, expected_hash);
+}
+
 #[test]
 fn test_compile_file_1() {
     let program = do_basic_run(&vec![
@@ -921,7 +1446,6 @@ fn test_check_tricky_arg_path_random() {
         )
         .unwrap();
         let disassembled = disassemble(&mut allocator, converted);
-        eprintln!("run {} want {} have {}", program, disassembled, res);
         assert_eq!(disassembled, res);
     }
 }

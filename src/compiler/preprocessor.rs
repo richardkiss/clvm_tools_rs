@@ -5,7 +5,7 @@ use std::rc::Rc;
 use clvmr::allocator::Allocator;
 
 use crate::classic::clvm::__type_compatibility__::{Bytes, BytesFromType};
-use crate::classic::clvm_tools::clvmc::compile_clvm_text;
+use crate::classic::clvm_tools::clvmc::compile_clvm_text_maybe_opt;
 
 use crate::compiler::cldb::hex_to_modern_sexp;
 use crate::compiler::clvm::convert_from_clvm_rs;
@@ -14,6 +14,13 @@ use crate::compiler::comptypes::{CompileErr, CompilerOpts, IncludeDesc, IncludeP
 use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{decode_string, enlist, parse_sexp, SExp};
 use crate::compiler::srcloc::Srcloc;
+use crate::util::ErrInto;
+
+#[derive(Clone, Debug)]
+enum IncludeType {
+    Basic(IncludeDesc),
+    Processed(IncludeDesc, IncludeProcessType, Vec<u8>),
+}
 
 #[derive(Clone, Debug)]
 enum IncludeType {
@@ -29,8 +36,10 @@ pub fn process_include(
     let content = filename_and_content.1;
     let start_of_file = Srcloc::start(&decode_string(&include.name));
 
+    // Because we're also subsequently returning CompileErr later in the pipe,
+    // this needs an explicit err map.
     parse_sexp(start_of_file.clone(), content.iter().copied())
-        .map_err(|e| CompileErr(e.0.clone(), e.1))
+        .err_into()
         .and_then(|x| match x[0].proper_list() {
             None => Err(CompileErr(
                 start_of_file,
@@ -66,14 +75,11 @@ fn process_embed(
     let run_to_compile_err = |e| match e {
         RunFailure::RunExn(l, x) => CompileErr(
             l,
-            format!(
-                "failed to convert compiled clvm to expression: throw ({})",
-                x
-            ),
+            format!("failed to convert compiled clvm to expression: throw ({x})"),
         ),
         RunFailure::RunErr(l, e) => CompileErr(
             l,
-            format!("failed to convert compiled clvm to expression: {}", e),
+            format!("failed to convert compiled clvm to expression: {e}"),
         ),
     };
 
@@ -91,7 +97,7 @@ fn process_embed(
             let parsed = parse_sexp(Srcloc::start(&full_name), content.iter().copied())
                 .map_err(|e| CompileErr(e.0, e.1))?;
             if parsed.len() != 1 {
-                return Err(CompileErr(loc, format!("More than one form in {}", fname)));
+                return Err(CompileErr(loc, format!("More than one form in {fname}")));
             }
 
             parsed[0].clone()
@@ -99,8 +105,9 @@ fn process_embed(
         IncludeProcessType::Compiled => {
             let decoded_content = decode_string(&content);
             let mut symtab = HashMap::new();
-            let newly_compiled = compile_clvm_text(
+            let newly_compiled = compile_clvm_text_maybe_opt(
                 &mut allocator,
+                opts.optimize(),
                 &opts.get_search_paths(),
                 &mut symtab,
                 &decoded_content,
@@ -228,7 +235,7 @@ fn process_pp_form(
                         } else {
                             return Err(CompileErr(
                                 body.loc(),
-                                format!("bad include kind in embed-file {}", body)
+                                format!("bad include kind in embed-file {body}")
                             ));
                         }
                     }
@@ -347,7 +354,7 @@ pub fn gather_dependencies(
     let mut includes = Vec::new();
     let loc = Srcloc::start(real_input_path);
 
-    let parsed = parse_sexp(loc.clone(), file_content.bytes()).map_err(|e| CompileErr(e.0, e.1))?;
+    let parsed = parse_sexp(loc.clone(), file_content.bytes())?;
 
     if parsed.is_empty() {
         return Ok(vec![]);
