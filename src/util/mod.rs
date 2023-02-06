@@ -41,7 +41,6 @@ pub fn collapse<A>(r: Result<A, A>) -> A {
     }
 }
 
-<<<<<<< HEAD
 #[derive(Debug, Clone)]
 pub struct TopoSortItem<K> {
     pub index: usize,
@@ -127,7 +126,8 @@ where
     }
 
     Ok(items)
-=======
+}
+
 pub trait ErrInto<D> {
     fn err_into(self) -> D;
 }
@@ -139,5 +139,4 @@ where
     fn err_into(self) -> Result<DestRes, DestErr> {
         self.map_err(|e| e.into())
     }
->>>>>>> 20230206-refresh-compile-file
 }

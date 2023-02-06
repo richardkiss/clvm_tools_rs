@@ -1064,8 +1064,8 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     if let Some(dialect) = choices.dialect {
         let do_optimize = parsed_args
             .get("optimize")
-            .map(|x| !matches!(x, ArgumentValue::ArgBool(true)))
-            .unwrap_or_else(|| true);
+            .map(|x| matches!(x, ArgumentValue::ArgBool(true)))
+            .unwrap_or_else(|| false);
         let runner = Rc::new(DefaultProgramRunner::new());
         let use_filename = input_file.unwrap_or_else(|| "*command*".to_string());
         let opts = Rc::new(DefaultCompilerOpts::new(&use_filename))

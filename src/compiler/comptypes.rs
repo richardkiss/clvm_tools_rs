@@ -184,12 +184,6 @@ pub enum ConstantKind {
 }
 
 #[derive(Clone, Debug)]
-pub enum ConstantKind {
-    Complex,
-    Simple,
-}
-
-#[derive(Clone, Debug)]
 pub enum HelperForm {
     Deftype(DeftypeData),
     Defconstant(DefconstData),
@@ -270,10 +264,7 @@ pub trait CompilerOpts {
     fn start_env(&self) -> Option<Rc<SExp>>;
     fn prim_map(&self) -> Rc<HashMap<Vec<u8>, Rc<SExp>>>;
     fn get_search_paths(&self) -> Vec<String>;
-<<<<<<< HEAD
     fn get_strict(&self) -> bool;
-=======
->>>>>>> 20230206-refresh-compile-file
 
     fn set_search_paths(&self, dirs: &[String]) -> Rc<dyn CompilerOpts>;
     fn set_in_defun(&self, new_in_defun: bool) -> Rc<dyn CompilerOpts>;
@@ -460,7 +451,6 @@ impl HelperForm {
                     ],
                 )),
             },
-<<<<<<< HEAD
             HelperForm::Deftype(deft) => {
                 let mut result_vec = vec![
                     Rc::new(SExp::atom_from_string(deft.loc.clone(), "deftype")),
@@ -477,8 +467,6 @@ impl HelperForm {
 
                 Rc::new(list_to_cons(deft.loc.clone(), &result_vec))
             }
-=======
->>>>>>> 20230206-refresh-compile-file
             HelperForm::Defmacro(mac) => Rc::new(SExp::Cons(
                 mac.loc.clone(),
                 Rc::new(SExp::atom_from_string(mac.loc.clone(), "defmacro")),

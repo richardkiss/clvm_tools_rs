@@ -22,12 +22,6 @@ enum IncludeType {
     Processed(IncludeDesc, IncludeProcessType, Vec<u8>),
 }
 
-#[derive(Clone, Debug)]
-enum IncludeType {
-    Basic(IncludeDesc),
-    Processed(IncludeDesc, IncludeProcessType, Vec<u8>),
-}
-
 pub fn process_include(
     opts: Rc<dyn CompilerOpts>,
     include: IncludeDesc,
