@@ -74,11 +74,6 @@ impl<'info> VisitedInfoAccess for VisitedMarker<'info, VisitedInfo> {
 
     fn insert_function(&mut self, name: Vec<u8>, body: Rc<BodyForm>) {
         if let Some(ref mut info) = self.info {
-            eprintln!(
-                "insert function {} {}",
-                decode_string(&name),
-                body.to_sexp()
-            );
             info.functions.insert(name, body);
         }
     }
