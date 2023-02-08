@@ -1269,7 +1269,6 @@ fn final_codegen(
         } else {
             code.1.clone()
         };
-        eprintln!("{} => {}", code.1, finished_code);
         final_comp.final_code = Some(CompiledCode(code.0, finished_code));
         final_comp
     })
