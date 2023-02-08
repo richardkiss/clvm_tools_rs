@@ -17,7 +17,6 @@ use crate::compiler::comptypes::{
 };
 use crate::compiler::frontend::frontend;
 use crate::compiler::runtypes::RunFailure;
-use crate::compiler::sexp::decode_string;
 use crate::compiler::sexp::SExp;
 use crate::compiler::srcloc::Srcloc;
 use crate::compiler::stackvisit::{HasDepthLimit, VisitedMarker};
