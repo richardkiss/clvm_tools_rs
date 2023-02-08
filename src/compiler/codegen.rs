@@ -23,6 +23,7 @@ use crate::compiler::frontend::compile_bodyform;
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
 use crate::compiler::lambda::compose_constant_function_env;
+use crate::compiler::optimize::finish_optimization;
 use crate::compiler::optimize::optimize_expr;
 use crate::compiler::prims::{primapply, primcons, primquote};
 use crate::compiler::runtypes::RunFailure;
@@ -309,7 +310,11 @@ fn generate_args_code(
                 hd.clone(),
             )
             .map(|x| x.1)?;
-            compiled_args.push(generated);
+            if opts.frontend_opt() {
+                compiled_args.push(Rc::new(finish_optimization(&generated)));
+            } else {
+                compiled_args.push(generated);
+            }
         }
         Ok(list_to_cons(l, &compiled_args))
     }
@@ -707,7 +712,7 @@ fn codegen_(
                         defun.args.clone(),
                     )));
 
-                let opt = if opts.optimize() {
+                let opt = if opts.optimize() || opts.frontend_opt() {
                     // Run optimizer on frontend style forms.
                     optimize_expr(
                         allocator,
@@ -745,7 +750,7 @@ fn codegen_(
                         &mut unused_symbol_table,
                     )
                     .and_then(|code| {
-                        if opts.optimize() {
+                        if opts.optimize() || opts.frontend_opt() {
                             run_optimizer(allocator, runner, Rc::new(code))
                         } else {
                             Ok(Rc::new(code))
@@ -1049,7 +1054,7 @@ fn collect_names_for_strict_body(pc: &mut PrimaryCodegen, b: &BodyForm) {
     match b {
         BodyForm::Value(v) => {
             if let SExp::Atom(_, name) = v.borrow() {
-                if !name.is_empty() && printable(name) {
+                if !name.is_empty() && printable(name, false) {
                     pc.mentioned_variable_names.push(Rc::new(v.clone()));
                 }
             }
@@ -1242,7 +1247,7 @@ fn final_codegen(
     opts: Rc<dyn CompilerOpts>,
     compiler: &PrimaryCodegen,
 ) -> Result<PrimaryCodegen, CompileErr> {
-    let opt_final_expr = if opts.optimize() {
+    let opt_final_expr = if opts.optimize() || opts.frontend_opt() {
         optimize_expr(
             allocator,
             opts.clone(),
@@ -1256,9 +1261,16 @@ fn final_codegen(
         compiler.final_expr.clone()
     };
 
-    generate_expr_code(allocator, runner, opts, compiler, opt_final_expr).map(|code| {
+    generate_expr_code(allocator, runner, opts.clone(), compiler, opt_final_expr).map(|code| {
         let mut final_comp = compiler.clone();
-        final_comp.final_code = Some(CompiledCode(code.0, code.1));
+        let finished_code =
+        if opts.frontend_opt() {
+            Rc::new(finish_optimization(&code.1.clone()))
+        } else {
+            code.1.clone()
+        };
+        eprintln!("{} => {}", code.1, finished_code);
+        final_comp.final_code = Some(CompiledCode(code.0, finished_code));
         final_comp
     })
 }
