@@ -18,7 +18,7 @@ use crate::compiler::codegen::{codegen, get_callable};
 use crate::compiler::comptypes::{
     BodyForm, Callable, CompileErr, CompileForm, CompilerOpts, HelperForm, PrimaryCodegen,
 };
-use crate::compiler::evaluate::{build_reflex_captures, Evaluator, EVAL_STACK_LIMIT, ExpandMode};
+use crate::compiler::evaluate::{build_reflex_captures, Evaluator, ExpandMode, EVAL_STACK_LIMIT};
 #[cfg(test)]
 use crate::compiler::sexp::parse_sexp;
 use crate::compiler::sexp::SExp;
@@ -258,7 +258,7 @@ fn take_smaller_form(
             functions: false,
             lets: with_inlines,
         },
-        Some(EVAL_STACK_LIMIT)
+        Some(EVAL_STACK_LIMIT),
     )?;
 
     let normal_form = CompileForm {
@@ -337,7 +337,7 @@ pub fn fe_opt(
                 args: defun.args.clone(),
                 helpers: compileform.helpers.clone(),
                 exp: defun.body.clone(),
-                ty: defun.ty.clone()
+                ty: defun.ty.clone(),
             };
             let better_form = take_smaller_form(
                 allocator,

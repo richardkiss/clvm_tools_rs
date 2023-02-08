@@ -13,7 +13,9 @@ use crate::classic::clvm_tools::stages::stage_0::DefaultProgramRunner;
 
 use crate::compiler::compiler::{is_at_capture, DefaultCompilerOpts};
 use crate::compiler::comptypes::{BodyForm, CompileErr, CompileForm, HelperForm};
-use crate::compiler::evaluate::{build_argument_captures, dequote, Evaluator, EVAL_STACK_LIMIT, ExpandMode};
+use crate::compiler::evaluate::{
+    build_argument_captures, dequote, Evaluator, ExpandMode, EVAL_STACK_LIMIT,
+};
 use crate::compiler::frontend::frontend;
 use crate::compiler::sexp::{decode_string, SExp};
 use crate::compiler::srcloc::{HasLoc, Srcloc};
@@ -564,8 +566,11 @@ fn handle_macro(
         Rc::new(SExp::Nil(loc.clone())),
         &arg_env,
         form.exp.clone(),
-        ExpandMode { functions: false, lets: true },
-        Some(EVAL_STACK_LIMIT)
+        ExpandMode {
+            functions: false,
+            lets: true,
+        },
+        Some(EVAL_STACK_LIMIT),
     )?;
     let parsed_macro_output = frontend(opts.clone(), &[result.to_sexp()])?;
     let exp_result = ev.shrink_bodyform(
@@ -573,8 +578,11 @@ fn handle_macro(
         Rc::new(SExp::Nil(loc.clone())),
         &arg_env,
         parsed_macro_output.exp,
-        ExpandMode { functions: true, lets: true },
-        Some(EVAL_STACK_LIMIT)
+        ExpandMode {
+            functions: true,
+            lets: true,
+        },
+        Some(EVAL_STACK_LIMIT),
     )?;
     match dequote(loc.clone(), exp_result) {
         Ok(dequoted) => {
@@ -643,8 +651,11 @@ fn chialisp_to_expr(
                 Rc::new(SExp::Nil(letdata.loc.clone())),
                 &HashMap::new(),
                 body.clone(),
-                ExpandMode { functions: true, lets: true },
-                Some(EVAL_STACK_LIMIT)
+                ExpandMode {
+                    functions: true,
+                    lets: true,
+                },
+                Some(EVAL_STACK_LIMIT),
             )?;
             chialisp_to_expr(program, form_args, beta_reduced)
         }
@@ -699,7 +710,7 @@ fn chialisp_to_expr(
         }
         _ => Err(CompileErr(
             body.loc(),
-            format!("not sure how to handle {:?} yet", body),
+            format!("not sure how to handle {body:?} yet"),
         )),
     }
 }
@@ -745,7 +756,7 @@ impl Context {
         for h in comp.helpers.iter() {
             if let HelperForm::Deftype(deft) = &h {
                 let tname = decode_string(&deft.name);
-                let n_encoding = number_from_u8(format!("struct {}", tname).as_bytes());
+                let n_encoding = number_from_u8(format!("struct {tname}").as_bytes());
                 // Ensure that we build up a unique type involving all variables so we won't try to solve it to some specific type
                 let mut result_ty = Type::TAtom(h.loc(), Some(n_encoding));
                 for a in deft.args.iter().rev() {

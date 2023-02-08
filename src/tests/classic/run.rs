@@ -20,7 +20,9 @@ use clvmr::allocator::Allocator;
 
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero, Stream};
 use crate::classic::clvm_tools::binutils::disassemble;
-use crate::classic::clvm_tools::cmds::{cldb, launch_tool, OpcConversion, OpdConversion, TConversion};
+use crate::classic::clvm_tools::cmds::{
+    cldb, launch_tool, OpcConversion, OpdConversion, TConversion,
+};
 use crate::classic::clvm_tools::node_path::NodePath;
 use crate::classic::clvm_tools::sha256tree::sha256tree;
 
@@ -560,9 +562,9 @@ fn test_embed_file_2() {
         "-i".to_string(),
         "resources/tests".to_string(),
         "(mod () (embed-file testhex hex hex-embed-01.hex) testhex)".to_string(),
-        ])
-        .trim()
-        .to_string();
+    ])
+    .trim()
+    .to_string();
     let run_result = do_basic_brun(&vec!["brun".to_string(), program, "()".to_string()])
         .trim()
         .to_string();
@@ -808,7 +810,6 @@ fn test_treehash_constant_21_2() {
 
     assert_eq!(result_hash, expected_hash);
 }
-
 
 #[test]
 fn test_include_non_strict_no_fail() {

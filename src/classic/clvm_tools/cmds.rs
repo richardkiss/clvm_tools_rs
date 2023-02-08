@@ -48,8 +48,8 @@ use crate::compiler::clvm::start_step;
 use crate::compiler::compiler::{compile_file, run_optimizer, DefaultCompilerOpts};
 use crate::compiler::comptypes::{CompileErr, CompilerOpts};
 use crate::compiler::debug::build_symbol_table_mut;
-use crate::compiler::preprocessor::gather_dependencies;
 use crate::compiler::frontend::frontend;
+use crate::compiler::preprocessor::gather_dependencies;
 use crate::compiler::prims;
 use crate::compiler::sexp;
 use crate::compiler::sexp::{decode_string, parse_sexp};
@@ -297,12 +297,9 @@ pub fn cldb_handle_trace(
             let use_args = if trace_first_arg {
                 Rc::new(rest_of_args[1].clone())
             } else {
-                let rest_list: Vec<Rc<sexp::SExp>> = 
+                let rest_list: Vec<Rc<sexp::SExp>> =
                     rest_of_args.iter().skip(1).cloned().map(Rc::new).collect();
-                Rc::new(sexp::enlist(
-                    rest_of_args[0].loc(),
-                    &rest_list
-                ))
+                Rc::new(sexp::enlist(rest_of_args[0].loc(), &rest_list))
             };
             (func, use_args)
         })
@@ -1011,8 +1008,7 @@ pub fn launch_tool(stdout: &mut Stream, args: &[String], tool_name: &str, defaul
     // If strict and no dialect, we'll compile with classic but we'll
     // use the same modern parse here to check for strict variable use.
     if do_check_unused || (choices.strict && choices.dialect.is_none()) || typecheck {
-        let opts =
-            Rc::new(DefaultCompilerOpts::new(&reported_input_file))
+        let opts = Rc::new(DefaultCompilerOpts::new(&reported_input_file))
             .set_search_paths(&search_paths)
             .set_strict(choices.strict);
         match do_strict_checks(

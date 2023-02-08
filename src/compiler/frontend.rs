@@ -10,8 +10,9 @@ use num_bigint::ToBigInt;
 
 use crate::classic::clvm::__type_compatibility__::{bi_one, bi_zero};
 use crate::compiler::comptypes::{
-    list_to_cons, Binding, BindingPattern, BodyForm, ChiaType, CompileErr, CompileForm, CompilerOpts, ConstantKind,
-    DefconstData, DefmacData, DefunData, DeftypeData, HelperForm, IncludeDesc, LetData, LetFormKind, ModAccum, StructDef, StructMember, TypeAnnoKind,
+    list_to_cons, Binding, BindingPattern, BodyForm, ChiaType, CompileErr, CompileForm,
+    CompilerOpts, ConstantKind, DefconstData, DefmacData, DeftypeData, DefunData, HelperForm,
+    IncludeDesc, LetData, LetFormKind, ModAccum, StructDef, StructMember, TypeAnnoKind,
 };
 use crate::compiler::lambda::handle_lambda;
 use crate::compiler::preprocessor::preprocess;
@@ -557,7 +558,7 @@ fn compile_defconst(
         name: name.to_vec(),
         body: Rc::new(bf),
         ty: None,
-        tabled: opts.frontend_opt()
+        tabled: opts.frontend_opt(),
     }))
 }
 
@@ -1022,7 +1023,7 @@ fn create_constructor(sdef: &StructDef) -> HelperForm {
             args: Rc::new(arguments),
             body: Rc::new(construction),
             ty: Some(funty),
-            synthetic: false
+            synthetic: false,
         },
     )
 }
@@ -1087,7 +1088,7 @@ pub fn generate_type_helpers(ty: &ChiaType) -> Vec<HelperForm> {
                                 ],
                             )),
                             ty: Some(funty),
-                            synthetic: false
+                            synthetic: false,
                         },
                     )
                 })
@@ -1180,7 +1181,7 @@ pub fn compile_helperform(
                 Some(matched.opl),
                 matched.name.to_vec(),
                 matched.args,
-                None
+                None,
             )?;
             Ok(Some(HelperFormResult {
                 chia_type: None,

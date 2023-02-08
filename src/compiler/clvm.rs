@@ -156,7 +156,7 @@ fn eval_args(
                 } else {
                     return Err(RunFailure::RunErr(
                         sexp.loc(),
-                        format!("bad argument list {} {}", sexp_, context_),
+                        format!("bad argument list {sexp_} {context_}"),
                     ));
                 }
             }

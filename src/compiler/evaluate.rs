@@ -12,7 +12,8 @@ use crate::compiler::clvm::run;
 use crate::compiler::codegen::codegen;
 use crate::compiler::compiler::is_at_capture;
 use crate::compiler::comptypes::{
-    Binding, BindingPattern, BodyForm, CompileErr, CompileForm, CompilerOpts, HelperForm, LetData, LetFormKind,
+    Binding, BindingPattern, BodyForm, CompileErr, CompileForm, CompilerOpts, HelperForm, LetData,
+    LetFormKind,
 };
 use crate::compiler::frontend::frontend;
 use crate::compiler::runtypes::RunFailure;
@@ -73,7 +74,11 @@ impl<'info> VisitedInfoAccess for VisitedMarker<'info, VisitedInfo> {
 
     fn insert_function(&mut self, name: Vec<u8>, body: Rc<BodyForm>) {
         if let Some(ref mut info) = self.info {
-            eprintln!("insert function {} {}", decode_string(&name), body.to_sexp());
+            eprintln!(
+                "insert function {} {}",
+                decode_string(&name),
+                body.to_sexp()
+            );
             info.functions.insert(name, body);
         }
     }
@@ -121,47 +126,47 @@ fn select_helper(bindings: &[HelperForm], name: &[u8]) -> Option<HelperForm> {
 }
 
 fn compute_paths_of_destructure(
-        bindings: &mut Vec<(Vec<u8>, Rc<BodyForm>)>,
-        structure: Rc<SExp>,
-        path: Number,
-        mask: Number,
-        bodyform: Rc<BodyForm>,
-    ) {
-        match structure.atomize() {
-            SExp::Cons(_, a, b) => {
-                let next_mask = mask.clone() * 2_u32.to_bigint().unwrap();
-                let next_right_path = mask + path.clone();
-                compute_paths_of_destructure(bindings, a, path, next_mask.clone(), bodyform.clone());
-                compute_paths_of_destructure(bindings, b, next_right_path, next_mask, bodyform);
-            }
-            SExp::Atom(_, name) => {
-                let mut produce_path = path.clone() | mask;
-                let mut output_form = bodyform.clone();
-                
-                while produce_path > bi_one() {
-                    if path.clone() & produce_path.clone() != bi_zero() {
-                        // Right path
-                        output_form = Rc::new(make_operator1(
-                            &bodyform.loc(),
-                            "r".to_string(),
-                            output_form,
-                        ));
-                    } else {
-                        // Left path
-                        output_form = Rc::new(make_operator1(
-                            &bodyform.loc(),
-                            "f".to_string(),
-                            output_form,
-                        ));
-                    }
-                    
-                    produce_path /= 2_u32.to_bigint().unwrap();
-                }
-                
-                bindings.push((name, output_form));
-            }
-            _ => {}
+    bindings: &mut Vec<(Vec<u8>, Rc<BodyForm>)>,
+    structure: Rc<SExp>,
+    path: Number,
+    mask: Number,
+    bodyform: Rc<BodyForm>,
+) {
+    match structure.atomize() {
+        SExp::Cons(_, a, b) => {
+            let next_mask = mask.clone() * 2_u32.to_bigint().unwrap();
+            let next_right_path = mask + path.clone();
+            compute_paths_of_destructure(bindings, a, path, next_mask.clone(), bodyform.clone());
+            compute_paths_of_destructure(bindings, b, next_right_path, next_mask, bodyform);
         }
+        SExp::Atom(_, name) => {
+            let mut produce_path = path.clone() | mask;
+            let mut output_form = bodyform.clone();
+
+            while produce_path > bi_one() {
+                if path.clone() & produce_path.clone() != bi_zero() {
+                    // Right path
+                    output_form = Rc::new(make_operator1(
+                        &bodyform.loc(),
+                        "r".to_string(),
+                        output_form,
+                    ));
+                } else {
+                    // Left path
+                    output_form = Rc::new(make_operator1(
+                        &bodyform.loc(),
+                        "f".to_string(),
+                        output_form,
+                    ));
+                }
+
+                produce_path /= 2_u32.to_bigint().unwrap();
+            }
+
+            bindings.push((name, output_form));
+        }
+        _ => {}
+    }
 }
 
 fn update_parallel_bindings(
@@ -839,7 +844,7 @@ impl<'info> Evaluator {
             let arg_part = self.shrink_bodyform_visited(
                 allocator,
                 visited,
-                 prog_args,
+                prog_args,
                 env,
                 literal_args,
                 expand,
@@ -1145,8 +1150,9 @@ impl<'info> Evaluator {
                     defun.args.clone(),
                     &argument_captures,
                     defun.body,
-                    expand.clone(),
-                ).map(Some)
+                    expand,
+                )
+                .map(Some)
             }
             _ => self
                 .invoke_primitive(
@@ -1244,35 +1250,33 @@ impl<'info> Evaluator {
                         literal_args,
                         expand,
                     )
-                } else {
-                    if let Some(x) = env.get(name) {
-                        if reflex_capture(name, x.clone()) {
-                            Ok(x.clone())
-                        } else {
-                            self.shrink_bodyform_visited(
-                                allocator,
-                                &mut visited,
-                                prog_args.clone(),
-                                env,
-                                x.clone(),
-                                expand.clone(),
-                            )
-                        }
-                    } else if let Some(x) = self.get_constant(name, expand.clone()) {
+                } else if let Some(x) = env.get(name) {
+                    if reflex_capture(name, x.clone()) {
+                        Ok(x.clone())
+                    } else {
                         self.shrink_bodyform_visited(
                             allocator,
                             &mut visited,
-                            prog_args.clone(),
+                            prog_args,
                             env,
-                            x,
+                            x.clone(),
                             expand,
                         )
-                    } else {
-                        Ok(Rc::new(BodyForm::Value(SExp::Atom(
-                            l.clone(),
-                            name.clone(),
-                        ))))
                     }
+                } else if let Some(x) = self.get_constant(name, expand.clone()) {
+                    self.shrink_bodyform_visited(
+                        allocator,
+                        &mut visited,
+                        prog_args,
+                        env,
+                        x,
+                        expand,
+                    )
+                } else {
+                    Ok(Rc::new(BodyForm::Value(SExp::Atom(
+                        l.clone(),
+                        name.clone(),
+                    ))))
                 }
             }
             BodyForm::Value(v) => Ok(Rc::new(BodyForm::Quoted(v.clone()))),

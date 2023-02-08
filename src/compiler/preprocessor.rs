@@ -143,8 +143,7 @@ fn process_pp_form(
             return Ok(());
         }
 
-        let parsed = parse_sexp(Srcloc::start(&full_name), content.iter().copied())
-            .map_err(|e| CompileErr(e.0, e.1))?;
+        let parsed = parse_sexp(Srcloc::start(&full_name), content.iter().copied())?;
         if parsed.is_empty() {
             return Ok(());
         }

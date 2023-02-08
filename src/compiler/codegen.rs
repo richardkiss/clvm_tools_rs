@@ -13,12 +13,12 @@ use crate::classic::clvm::__type_compatibility__::bi_one;
 use crate::compiler::clvm::run;
 use crate::compiler::compiler::{is_at_capture, run_optimizer};
 use crate::compiler::comptypes::{
-    fold_m, join_vecs_to_string, list_to_cons, Binding, BindingPattern, BodyForm, Callable, CompileErr,
-    CompileForm, CompiledCode, CompilerOpts, ConstantKind, DefunCall, DefunData, HelperForm,
-    InlineFunction, LetData, LetFormKind, PrimaryCodegen,
+    fold_m, join_vecs_to_string, list_to_cons, Binding, BindingPattern, BodyForm, Callable,
+    CompileErr, CompileForm, CompiledCode, CompilerOpts, ConstantKind, DefunCall, DefunData,
+    HelperForm, InlineFunction, LetData, LetFormKind, PrimaryCodegen,
 };
 use crate::compiler::debug::{build_swap_table_mut, relabel};
-use crate::compiler::evaluate::{Evaluator, EVAL_STACK_LIMIT, ExpandMode};
+use crate::compiler::evaluate::{Evaluator, ExpandMode, EVAL_STACK_LIMIT};
 use crate::compiler::frontend::compile_bodyform;
 use crate::compiler::gensym::gensym;
 use crate::compiler::inline::{replace_in_inline, synthesize_args};
@@ -559,7 +559,7 @@ pub fn generate_expr_code(
                                     // in strict mode.
                                     return Err(CompileErr(
                                         l.clone(),
-                                        format!("Unknown variable reference {}", v),
+                                        format!("Unknown variable reference {v}"),
                                     ));
                                 }
                                 // Pass through atoms that don't look up on behalf of
@@ -844,15 +844,9 @@ fn generate_let_defun(
     // Count occurrences per binding.
     let deinline_score: usize = bindings
         .iter()
-        .map(|b| {
-            match &b.pattern {
-                BindingPattern::Name(name) => {
-                    count_occurrences(&name, body.borrow())
-                }
-                BindingPattern::Complex(_) => {
-                    2
-                }
-            }
+        .map(|b| match &b.pattern {
+            BindingPattern::Name(name) => count_occurrences(name, body.borrow()),
+            BindingPattern::Complex(_) => 2,
         })
         .sum();
 
@@ -1139,7 +1133,7 @@ fn start_codegen(
                         if defc.tabled {
                             use_compiler.add_tabled_constant(&defc.name, res)
                         } else {
-                            let quoted = primquote(defc.loc.clone(), res.clone());
+                            let quoted = primquote(defc.loc.clone(), res);
                             use_compiler.add_constant(&defc.name, Rc::new(quoted))
                         }
                     })?
@@ -1152,8 +1146,11 @@ fn start_codegen(
                         Rc::new(SExp::Nil(defc.loc.clone())),
                         &HashMap::new(),
                         defc.body.clone(),
-                        ExpandMode { functions: true, lets: true },
-                        Some(EVAL_STACK_LIMIT)
+                        ExpandMode {
+                            functions: true,
+                            lets: true,
+                        },
+                        Some(EVAL_STACK_LIMIT),
                     )?;
                     if let BodyForm::Quoted(q) = constant_result.borrow() {
                         let res = Rc::new(SExp::Cons(

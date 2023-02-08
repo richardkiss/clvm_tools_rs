@@ -30,7 +30,7 @@ impl<const A: usize> TheoryToSExp for Type<A> {
             Type::TAny(l) => SExp::Atom(l.clone(), "Any".as_bytes().to_vec()),
             Type::TAtom(l, None) => SExp::Atom(l.clone(), "Atom".as_bytes().to_vec()),
             Type::TAtom(l, Some(s)) => {
-                let atom_intro = format!("Atom{}", s).as_bytes().to_vec();
+                let atom_intro = format!("Atom{s}").as_bytes().to_vec();
                 SExp::Atom(l.clone(), atom_intro)
             }
             Type::TVar(v) => SExp::Atom(v.loc(), v.0.as_bytes().to_vec()),
@@ -234,8 +234,7 @@ impl<const A: usize> TheoryToSExp for ContextElim<A> {
 impl<const A: usize> TheoryToSExp for GContext<A> {
     fn to_sexp(&self) -> SExp {
         let thloc = Srcloc::start("*gcontext*");
-        let context_list: Vec<Rc<SExp>> =
-            self.0.iter().map(|x| Rc::new(x.to_sexp())).collect();
+        let context_list: Vec<Rc<SExp>> = self.0.iter().map(|x| Rc::new(x.to_sexp())).collect();
         enlist(thloc, &context_list)
     }
 }
@@ -243,7 +242,7 @@ impl<const A: usize> TheoryToSExp for GContext<A> {
 pub fn parse_type_var(atom: Rc<SExp>) -> Result<TypeVar, CompileErr> {
     match atom.atomize() {
         SExp::Atom(l, a) => Ok(TypeVar(std::str::from_utf8(&a).unwrap().to_string(), l)),
-        _ => Err(CompileErr(atom.loc(), format!("not a type var: {}", atom))),
+        _ => Err(CompileErr(atom.loc(), format!("not a type var: {atom}"))),
     }
 }
 
@@ -255,7 +254,7 @@ fn parse_type_exists<const A: usize>(rest: Rc<SExp>) -> Result<Type<A>, CompileE
         }
         _ => Err(CompileErr(
             rest.loc(),
-            format!("not a valid exists tail: {}", rest),
+            format!("not a valid exists tail: {rest}"),
         )),
     }
 }
@@ -269,7 +268,7 @@ fn parse_type_forall<const A: usize>(rest: Rc<SExp>) -> Result<Type<A>, CompileE
         }
     }
 
-    Err(CompileErr(rest.loc(), format!("bad forall tail: {}", rest)))
+    Err(CompileErr(rest.loc(), format!("bad forall tail: {rest}")))
 }
 
 fn parse_type_pair<const A: usize, F>(f: F, rest: Rc<SExp>) -> Result<Type<A>, CompileErr>
@@ -286,7 +285,7 @@ where
 
     Err(CompileErr(
         rest.loc(),
-        format!("bad product tail: {}", rest),
+        format!("bad product tail: {rest}"),
     ))
 }
 
@@ -300,7 +299,7 @@ where
 
     Err(CompileErr(
         rest.loc(),
-        format!("bad wrapper tail: {}", rest),
+        format!("bad wrapper tail: {rest}"),
     ))
 }
 
@@ -338,7 +337,7 @@ fn parse_type_fun<const A: usize>(full: Rc<SExp>, elist: &[SExp]) -> Result<Type
                 result = Type::TFun(Rc::new(ty), Rc::new(result));
             } else if let SExp::Atom(l, a) = &elist[i].atomize() {
                 if &"->".as_bytes().to_vec() != a {
-                    return Err(CompileErr(l.clone(), format!("bad arrow in {}", full)));
+                    return Err(CompileErr(l.clone(), format!("bad arrow in {full}")));
                 }
             }
 
@@ -362,7 +361,7 @@ pub fn parse_fixedlist<const A: usize>(expr: Rc<SExp>) -> Result<Type<A>, Compil
         SExp::Nil(l) => Ok(Type::TUnit(l.clone())),
         _ => Err(CompileErr(
             expr.loc(),
-            format!("Don't know how to handle type named {}", expr),
+            format!("Don't know how to handle type named {expr}"),
         )),
     }
 }
@@ -433,7 +432,7 @@ pub fn parse_type_sexp<const A: usize>(expr: Rc<SExp>) -> Result<Type<A>, Compil
 
     Err(CompileErr(
         expr.loc(),
-        format!("not a valid type expression: {}", expr),
+        format!("not a valid type expression: {expr}"),
     ))
 }
 
@@ -442,7 +441,7 @@ pub fn parse_evar(expr: &SExp) -> Result<Var, CompileErr> {
         return Ok(Var(std::str::from_utf8(a).unwrap().to_string(), l.clone()));
     }
 
-    Err(CompileErr(expr.loc(), format!("expected var got {}", expr)))
+    Err(CompileErr(expr.loc(), format!("expected var got {expr}")))
 }
 
 pub fn parse_expr_anno(elist: &[SExp]) -> Result<Expr, CompileErr> {
@@ -540,5 +539,5 @@ pub fn parse_expr_sexp(expr: Rc<SExp>) -> Result<Expr, CompileErr> {
         _ => {}
     }
 
-    Err(CompileErr(expr.loc(), format!("bad expr {}", expr)))
+    Err(CompileErr(expr.loc(), format!("bad expr {expr}")))
 }
