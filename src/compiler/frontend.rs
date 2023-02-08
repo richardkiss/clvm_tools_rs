@@ -1444,6 +1444,24 @@ fn frontend_start(
     }
 }
 
+fn constant_used_in_functions(
+    helpers: &[HelperForm],
+    expr: &BodyForm,
+    name: &Vec<u8>
+) -> bool {
+    for h in helpers.iter() {
+        if let HelperForm::Defun(_, defundata) = &h {
+            let used_names = collect_used_names_bodyform(defundata.body.borrow());
+            if used_names.contains(name) {
+                return true;
+            }
+        }
+    }
+
+    let used_names = collect_used_names_bodyform(expr);
+    used_names.contains(name)
+}
+
 pub fn frontend(
     opts: Rc<dyn CompilerOpts>,
     pre_forms: &[Rc<SExp>],
@@ -1473,17 +1491,28 @@ pub fn frontend(
         .map(|x| x.to_vec())
         .collect();
 
-    let helper_list = our_mod.helpers.iter().map(|h| (h.name(), h));
+    let helper_list: Vec<HelperForm> = our_mod.helpers.iter()
+        .map(|h| {
+            if let HelperForm::Defconstant(cdata) = &h {
+                if !constant_used_in_functions(&our_mod.helpers, &our_mod.exp, &cdata.name) {
+                    // De-table anything that isn't used in a function.
+                    return HelperForm::Defconstant(DefconstData {
+                        tabled: false, .. cdata.clone()
+                    })
+                }
+            }
+            h.clone()
+        }).collect();
     let mut helper_map = HashMap::new();
 
-    for hpair in helper_list {
-        helper_map.insert(hpair.0.clone(), hpair.1.clone());
+    for h in helper_list.iter() {
+        helper_map.insert(h.name().to_vec(), h.clone());
     }
 
     let helper_names = calculate_live_helpers(&HashSet::new(), &expr_names, &helper_map);
 
     let mut live_helpers = Vec::new();
-    for h in our_mod.helpers {
+    for h in helper_list.into_iter() {
         if matches!(h, HelperForm::Deftype(_)) || helper_names.contains(h.name()) {
             live_helpers.push(h);
         }

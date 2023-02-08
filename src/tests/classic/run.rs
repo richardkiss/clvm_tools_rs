@@ -689,6 +689,64 @@ fn test_embed_file_9() {
 }
 
 #[test]
+fn test_assign_in_if_cl22() {
+    let program = indoc!{"
+                         (mod (X)
+                          (include *standard-cl-22*)
+                          (defun-inline tup (X Y) (c X Y))
+                          (defun-inline F (A B) (+ A B))
+                          (if X
+                           (assign
+                            (X1 . X2) (tup (+ X 1) (+ X 2)) ;; 14
+                            X2 (+ X1 1) ;; 15
+                            X3 (+ X2 1) ;; 16
+                            (Y0 . X4) (tup (+ X3 1) (+ X3 1)) ;; 17
+                            X5 (+ Y0 1) ;; 18
+                            Y1 (+ X5 Y0) ;; 35
+                            Y1
+                           )
+                           101
+                          )
+                         )"}
+    .to_string();
+    let compiled = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        program
+    ]).trim().to_string();
+    let res = do_basic_brun(&vec!["brun".to_string(), compiled, "(13)".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(res.to_string(), "35");
+}
+
+#[test]
+fn test_constant_wiping() {
+    let program = indoc!{"
+                         (mod (X)
+                          (include *standard-cl-22*)
+                          (defconst STUFF-A 4321)
+                          (defconst STUFF-B (+ STUFF-A 1))
+                          (defun F (A) (c A STUFF-B))
+                          (F X)
+                          )"}
+    .to_string();
+    let compiled = do_basic_run(&vec![
+        "run".to_string(),
+        "-i".to_string(),
+        "resources/tests".to_string(),
+        program
+    ]).trim().to_string();
+    eprintln!("{compiled}");
+    assert!(!compiled.contains("4321"));
+    let res = do_basic_brun(&vec!["brun".to_string(), compiled, "(99)".to_string()])
+        .trim()
+        .to_string();
+    assert_eq!(res, "(99 . 4322)");
+}
+
+#[test]
 fn test_get_dependencies_2() {
     let dep_set = run_dependencies("resources/tests/test_treehash_constant.cl");
 
