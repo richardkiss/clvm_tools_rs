@@ -846,16 +846,7 @@ fn generate_let_defun(
         Rc::new(list_to_cons(l.clone(), &new_arguments)),
     );
 
-    // Count occurrences per binding.
-    let deinline_score: usize = bindings
-        .iter()
-        .map(|b| match &b.pattern {
-            BindingPattern::Name(name) => count_occurrences(name, body.borrow()),
-            BindingPattern::Complex(_) => 2,
-        })
-        .sum();
-
-    let inline = !opts.frontend_opt() || deinline_score > 0;
+    let inline = !opts.frontend_opt();
     HelperForm::Defun(
         inline,
         DefunData {
