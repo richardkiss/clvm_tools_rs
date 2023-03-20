@@ -12,8 +12,7 @@ use crate::compiler::clvm::run;
 use crate::compiler::codegen::codegen;
 use crate::compiler::compiler::is_at_capture;
 use crate::compiler::comptypes::{
-    Binding, BindingPattern, BodyForm, CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, LetData,
-    LetFormKind,
+    Binding, BindingPattern, BodyForm, CompileErr, CompileForm, CompilerOpts, DefunData, HelperForm, LetData, LetFormKind,
 };
 use crate::compiler::frontend::frontend;
 use crate::compiler::runtypes::RunFailure;
@@ -1307,6 +1306,15 @@ impl<'info> Evaluator {
                         prog_args,
                         env,
                         x,
+                        expand,
+                    )
+                } else if let Some(function) = self.get_function(&name) {
+                    self.shrink_bodyform_visited(
+                        allocator,
+                        &mut visited,
+                        prog_args,
+                        env,
+                        self.create_mod_for_fun(&l, function),
                         expand,
                     )
                 } else if let Some(function) = self.get_function(&name) {
