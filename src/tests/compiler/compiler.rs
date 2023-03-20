@@ -1620,3 +1620,18 @@ fn test_lambda_using_macro() {
     let res = run_string(&prog, &"(1 (10 20 30))".to_string()).unwrap();
     assert_eq!(res.to_string(), "((1 10) (1 20) (1 30))");
 }
+
+#[test]
+fn test_treat_function_name_as_value() {
+    let prog = indoc! {"
+(mod (X)
+ (include *standard-cl-21*)
+ (defun G (X) (* 2 X))
+ (defun F (X) (G (+ 1 X)))
+ (a F (list X))
+)
+    "}
+    .to_string();
+    let res = run_string(&prog, &"(99)".to_string()).expect("should compile");
+    assert_eq!(res.to_string(), "200");
+}
