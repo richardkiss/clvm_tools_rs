@@ -1642,7 +1642,7 @@ fn test_treat_function_name_as_value_filter() {
     (mod L
      (include *standard-cl-21*)
      (defun greater-than-3 (X) (> X 3))
-     (defun filter (F L) (let ((rest (filter F (r L)))) (if L (if (a F (list (f L))) (c (f L) rest) rest) ())))
+     (defun filter (F L) (if L (if (a F (list (f L))) (c (f L) (filter F (r L))) (filter F (r L))) ()))
      (filter greater-than-3 L)
     )
     "}
