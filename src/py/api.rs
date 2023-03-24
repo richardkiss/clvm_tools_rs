@@ -34,15 +34,18 @@ use crate::compiler::runtypes::RunFailure;
 use crate::compiler::sexp::{decode_string, SExp};
 use crate::compiler::srcloc::Srcloc;
 
+use crate::util::version;
+
 use crate::py::pyval::{clvm_value_to_python, python_value_to_clvm};
+
+use super::cmds::create_cmds_module;
 
 create_exception!(mymodule, CldbError, PyException);
 create_exception!(mymodule, CompError, PyException);
 
-// Thanks: https://www.reddit.com/r/rust/comments/bkkpkz/pkgversion_access_your_crates_version_number_as/
 #[pyfunction]
 fn get_version() -> PyResult<String> {
-    Ok(env!("CARGO_PKG_VERSION").to_string())
+    Ok(version())
 }
 
 #[pyfunction(arg3 = "[]", arg4 = "None")]
@@ -369,6 +372,8 @@ pub fn compose_run_function(
 
 #[pymodule]
 fn clvm_tools_rs(py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_submodule(create_cmds_module(py)?)?;
+
     m.add("CldbError", py.get_type::<CldbError>())?;
     m.add("CompError", py.get_type::<CompError>())?;
 

@@ -5,6 +5,8 @@ use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+use serde::Serialize;
+
 use log::debug;
 
 use crate::compiler::srcloc::{HasLoc, Srcloc};
@@ -17,7 +19,7 @@ pub const CONTEXT_INCOMPLETE: usize = 1;
 pub const TYPE_MONO: usize = 0;
 pub const TYPE_POLY: usize = 1;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct Var(pub String, pub Srcloc);
 
 impl PartialEq for Var {
@@ -43,7 +45,7 @@ impl HasLoc for Var {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct TypeVar(pub String, pub Srcloc);
 
 impl PartialEq for TypeVar {
@@ -69,7 +71,7 @@ impl HasLoc for TypeVar {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum Expr {
     EVar(Var),
     EUnit(Srcloc),
@@ -107,7 +109,7 @@ impl HasLoc for Expr {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub enum Type<const T: usize> {
     TUnit(Srcloc),
     TAny(Srcloc),
