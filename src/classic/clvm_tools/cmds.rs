@@ -266,52 +266,6 @@ fn to_yaml(entries: &[BTreeMap<String, String>]) -> Yaml {
     Yaml::Array(result_array)
 }
 
-// Return a hash for yaml generation containing the name of the matched function
-// and a subset of the arguments.
-//
-// Grab either the first argument (like haskell's trace) or the full argument list
-// (including a passed-through value) based on first_arg.
-pub fn cldb_handle_trace(
-    trace_first_arg: bool,
-    trace: &[String],
-    result: &BTreeMap<String, String>,
-) -> Option<BTreeMap<String, String>> {
-    result
-        .get("Function")
-        .filter(|f| trace.contains(f))
-        .and_then(|func| result.get("Value").map(|args| (func, args)))
-        .and_then(|(func, args)| {
-            parse_sexp(Srcloc::start("*run*"), args.bytes())
-                .ok()
-                .map(|parsed_sexp| (func, parsed_sexp))
-        })
-        .filter(|(_func, parsed_sexp)| !parsed_sexp.is_empty())
-        .and_then(|(func, parsed_sexp)| {
-            parsed_sexp[0]
-                .proper_list()
-                .map(|rest_of_args| (func, rest_of_args))
-        })
-        .filter(|(_func, rest_of_args)| rest_of_args.len() > 1)
-        .map(|(func, rest_of_args)| {
-            // If we can make a list from the args,
-            //   choose the first arg if first_arg is true
-            //   otherwise pick everything after the left env
-            let use_args = if trace_first_arg {
-                Rc::new(rest_of_args[1].clone())
-            } else {
-                let rest_list: Vec<Rc<sexp::SExp>> =
-                    rest_of_args.iter().skip(1).cloned().map(Rc::new).collect();
-                Rc::new(sexp::enlist(rest_of_args[0].loc(), &rest_list))
-            };
-            (func, use_args)
-        })
-        .map(|(func, use_args)| {
-            let mut new_hash = BTreeMap::new();
-            new_hash.insert(func.clone(), use_args.to_string());
-            new_hash
-        })
-}
-
 pub fn cldb(out: &mut dyn std::io::Write, args: &[String]) {
     let tool_name = "cldb".to_string();
     let props = TArgumentParserProps {
@@ -348,16 +302,16 @@ pub fn cldb(out: &mut dyn std::io::Write, args: &[String]) {
             .set_help("show first argument only of traced functions".to_string()),
     );
     parser.add_argument(
-        vec!["-t".to_string(), "--trace".to_string()],
-        Argument::new()
-            .set_action(TArgOptionAction::Append)
-            .set_default(ArgumentValue::ArgArray(vec![])),
-    );
-    parser.add_argument(
         vec!["-y".to_string(), "--symbol-table".to_string()],
         Argument::new()
             .set_type(Rc::new(PathOrCodeConv {}))
             .set_help("path to symbol file".to_string()),
+    );
+    parser.add_argument(
+        vec!["-p".to_string(), "--only-print".to_string()],
+        Argument::new()
+            .set_action(TArgOptionAction::StoreTrue)
+            .set_help("only show printing from the program".to_string()),
     );
     parser.add_argument(
         vec!["path_or_code".to_string()],
@@ -408,25 +362,6 @@ pub fn cldb(out: &mut dyn std::io::Write, args: &[String]) {
         parsed_args_result = s.to_string();
     }
 
-    let trace = if let Some(ArgumentValue::ArgArray(arr)) = parsed_args.get("trace") {
-        arr.iter()
-            .filter_map(|s| {
-                if let ArgumentValue::ArgString(_, s) = s {
-                    Some(s.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    } else {
-        vec![]
-    };
-
-    let trace_first_arg = matches!(
-        parsed_args.get("trace_first_arg"),
-        Some(ArgumentValue::ArgBool(true))
-    );
-
     let mut allocator = Allocator::new();
 
     let symbol_table = parsed_args
@@ -439,6 +374,8 @@ pub fn cldb(out: &mut dyn std::io::Write, args: &[String]) {
             }
             _ => None,
         });
+
+    let only_print = parsed_args.get("only_print").map(|_| true).unwrap_or(false);
 
     let do_optimize = parsed_args
         .get("optimize")
@@ -557,9 +494,13 @@ pub fn cldb(out: &mut dyn std::io::Write, args: &[String]) {
         }
 
         if let Some(result) = cldbrun.step(&mut allocator) {
-            if trace.is_empty() {
-                output.push(result);
-            } else if let Some(result) = cldb_handle_trace(trace_first_arg, &trace, &result) {
+            if only_print {
+                if let Some(p) = result.get("Print") {
+                    let mut only_print = BTreeMap::new();
+                    only_print.insert("Print".to_string(), p.clone());
+                    output.push(only_print);
+                }
+            } else {
                 output.push(result);
             }
         }
