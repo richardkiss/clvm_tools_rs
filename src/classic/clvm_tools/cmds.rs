@@ -242,6 +242,7 @@ pub fn run(args: &[String]) {
     io::stdout()
         .write_all(s.get_value().data())
         .expect("stdout");
+    io::stdout().flush().expect("stdout");
 }
 
 pub fn brun(args: &[String]) {
@@ -250,6 +251,7 @@ pub fn brun(args: &[String]) {
     io::stdout()
         .write_all(s.get_value().data())
         .expect("stdout");
+    io::stdout().flush().expect("stdout");
 }
 
 fn to_yaml(entries: &[BTreeMap<String, String>]) -> Yaml {
