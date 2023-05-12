@@ -13,10 +13,13 @@ use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 
-use clvm_rs::allocator::Allocator;
+use clvmr::allocator::Allocator;
+use clvmr::node::Node;
+use clvmr::serialize::node_to_bytes;
 
 use crate::classic::clvm::__type_compatibility__::{Bytes, BytesFromType, Stream};
 use crate::classic::clvm::serialize::sexp_to_stream;
+use crate::classic::clvm_tools::binutils::disassemble;
 use crate::classic::clvm_tools::clvmc;
 use crate::classic::clvm_tools::cmds;
 use crate::classic::clvm_tools::stages::stage_0::DefaultProgramRunner;
@@ -89,6 +92,41 @@ fn compile_clvm(
             Ok(compiled.into_py(py))
         }
     })
+}
+
+#[pyfunction(arg1 = "[]", arg2 = true)]
+fn compile(
+    py: Python<'_>,
+    source: String,
+    search_paths: Vec<String>,
+    export_symbols: bool,
+) -> PyResult<PyObject> {
+    let mut symbols = HashMap::new();
+
+    let mut allocator = Allocator::new();
+    let compiled_node = clvmc::compile_clvm_text(
+        &mut allocator,
+        &search_paths,
+        &mut symbols,
+        &source,
+        "*inline*",
+    )
+    .map_err(|x| {
+        format!(
+            "error {} compiling {}",
+            x.1,
+            disassemble(&mut allocator, x.0)
+        )
+    })
+    .map_err(PyException::new_err)?;
+
+    let blob =
+        node_to_bytes(&Node::new(&allocator, compiled_node)).map_err(PyException::new_err)?;
+    if export_symbols {
+        Ok((blob, symbols).into_py(py))
+    } else {
+        Ok(blob.into_py(py))
+    }
 }
 
 #[pyfunction(arg2 = "[]")]
@@ -378,6 +416,7 @@ fn clvm_tools_rs(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("CompError", py.get_type::<CompError>())?;
 
     m.add_function(wrap_pyfunction!(compile_clvm, m)?)?;
+    m.add_function(wrap_pyfunction!(compile, m)?)?;
     m.add_function(wrap_pyfunction!(get_version, m)?)?;
     m.add_function(wrap_pyfunction!(start_clvm_program, m)?)?;
     m.add_function(wrap_pyfunction!(launch_tool, m)?)?;
